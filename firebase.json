@@ -1,0 +1,18 @@
+{
+  "functions": {
+    "source": "backend/functions",
+    "runtime": "nodejs18",
+    "predeploy": ["npm --prefix \"$RESOURCE_DIR\" install"]
+  },
+  "firestore": {
+    "rules": "backend/firestore.rules",
+    "indexes": "backend/firestore.indexes.json"
+  },
+  "hosting": {
+    "public": "mobile/build/web",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "rewrites": [
+      { "source": "/api/**", "function": "api" }
+    ]
+  }
+}

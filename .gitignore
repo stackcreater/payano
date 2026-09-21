@@ -1,0 +1,54 @@
+# Flutter SDK repository (local copy)
+flutter/
+.kilo/
+
+# Dependencies and environments
+node_modules/
+**/node_modules/
+.env
+**/.env
+.env.*
+!*.example
+.venv/
+venv/
+env/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+
+# Logs and OS
+*.log
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Firebase & Secrets
+*firebase-adminsdk*.json
+**/payano-*-firebase-adminsdk-*.json
+google-services.json
+**/google-services.json
+GoogleService-Info*.plist
+**/GoogleService-Info*.plist
+
+# Flutter & Dart build artifacts
+mobile/build/
+**/build/
+.dart_tool/
+**/.dart_tool/
+.flutter-plugins
+**/.flutter-plugins
+.flutter-plugins-dependencies
+**/.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+
+# Platform specific
+mobile/ios/Pods/
+**/Pods/
+mobile/ios/.symlinks/
+mobile/android/.gradle/
+**/.gradle/
+local.properties
+**/local.properties
+

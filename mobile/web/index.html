@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base href="$FLUTTER_BASE_HREF">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="Payano - Modern Two-Wheeler Ride Booking & Bike Taxi Application">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- iOS meta tags & icons -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Payano">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="favicon.png"/>
+
+  <title>Payano - Two Wheeler Rides</title>
+  <link rel="manifest" href="manifest.json">
+
+  <!-- Google Sign-In Client ID for Web -->
+  <meta name="google-signin-client_id" content="481933006221-ono7cd7hnmaju022johlvornt50gb1ms.apps.googleusercontent.com">
+
+  <!-- MapLibre GL JS — Required for maplibre_gl Flutter package on web -->
+  <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet" />
+  <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
+
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #0b111e;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    #loading-indicator {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: #ffffff;
+      transition: opacity 0.4s ease;
+    }
+    .brand-title {
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      margin-bottom: 8px;
+      color: #2563eb;
+    }
+    .brand-subtitle {
+      font-size: 13px;
+      color: #94a3b8;
+      margin-bottom: 24px;
+      letter-spacing: 0.5px;
+    }
+    .spinner {
+      width: 36px;
+      height: 36px;
+      border: 3px solid rgba(255, 255, 255, 0.12);
+      border-radius: 50%;
+      border-top-color: #2563eb;
+      animation: spin 0.8s ease-in-out infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* MapLibre GL JS — ensure canvas fills the Flutter platform view container */
+    .maplibregl-canvas-container {
+      width: 100% !important;
+      height: 100% !important;
+    }
+    .maplibregl-canvas {
+      width: 100% !important;
+      height: 100% !important;
+    }
+  </style>
+</head>
+<body>
+  <!-- Instant visual preloader so the tab never shows a blank white screen -->
+  <div id="loading-indicator">
+    <div class="brand-title">PAYANO</div>
+    <div class="brand-subtitle">Urban Two-Wheeler Mobility</div>
+    <div class="spinner"></div>
+  </div>
+
+  <!-- reCAPTCHA container required for Firebase Phone Auth on web -->
+  <div id="recaptcha-container"></div>
+
+  <script>
+    function removeLoader() {
+      var loader = document.getElementById('loading-indicator');
+      if (loader) {
+        loader.style.opacity = '0';
+        setTimeout(function() { 
+          if (loader && loader.parentNode) {
+            loader.parentNode.removeChild(loader);
+          }
+        }, 400);
+      }
+    }
+    window.addEventListener('flutter-first-frame', removeLoader);
+    // Safety fallback: if first frame isn't fired in 6s after load, remove loader
+    window.addEventListener('load', function() {
+      setTimeout(removeLoader, 6000);
+    });
+  </script>
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>
