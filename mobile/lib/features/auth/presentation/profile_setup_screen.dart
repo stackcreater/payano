@@ -54,9 +54,9 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
 
   void _pickImage({required bool useCamera}) async {
     try {
-      final result = await FilePicker.pickFiles(type: FileType.image);
-      if (result != null && result.isNotEmpty) {
-        final path = result.first.path ?? result.first.name;
+      final result = await FilePicker.platform.pickFiles(type: FileType.image);
+      if (result != null && result.files.isNotEmpty) {
+        final path = result.files.first.path ?? result.files.first.name;
         setState(() {
           _selectedImage = path;
         });

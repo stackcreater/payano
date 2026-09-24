@@ -29,14 +29,15 @@ class AppUploadedFile {
 
   static Future<AppUploadedFile?> pickDocument() async {
     try {
-      final files = await FilePickerPlatform.instance.pickFiles(
+      final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['pdf', 'docx', 'doc', 'png', 'jpg', 'jpeg'],
+        withData: true,
       );
-      if (files.isNotEmpty) {
-        final file = files.first;
-        final bytes = await file.readAsBytes();
-        final size = await file.length();
+      if (result != null && result.files.isNotEmpty) {
+        final file = result.files.first;
+        final bytes = file.bytes;
+        final size = file.size;
         final ext = file.name.contains('.') ? file.name.split('.').last.toUpperCase() : 'DOC';
         return AppUploadedFile(
           name: file.name,

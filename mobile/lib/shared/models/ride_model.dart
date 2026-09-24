@@ -160,7 +160,7 @@ class RideModel {
       estimatedFare: (map['estimatedFare'] as num?)?.toDouble() ?? 0.0,
       finalFare: (map['finalFare'] as num?)?.toDouble() ?? 0.0,
       status: RideStatus.values.firstWhere(
-        (e) => e.name == map['status'],
+        (e) => e.name.toLowerCase() == (map['status'] ?? '').toString().replaceAll('_', '').toLowerCase(),
         orElse: () => RideStatus.requested,
       ),
       startOtp: map['startOtp'] ?? '1234',

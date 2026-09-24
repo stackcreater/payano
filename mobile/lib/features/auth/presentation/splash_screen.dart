@@ -30,7 +30,7 @@ class _SplashScreenState extends State<SplashScreen>
     );
     _controller.forward();
 
-    Future.delayed(const Duration(milliseconds: 1800), () async {
+    Future.delayed(const Duration(milliseconds: 300), () async {
       if (!mounted) return;
       final prefs = await SharedPreferences.getInstance();
       final onboardingDone = prefs.getBool('onboarding_completed') ?? false;

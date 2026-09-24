@@ -76,9 +76,9 @@ class ProfileScreen extends ConsumerWidget {
 
   void _pickAndUpdateImage(WidgetRef ref, {required bool useCamera}) async {
     try {
-      final result = await FilePicker.pickFiles(type: FileType.image);
-      if (result.isNotEmpty) {
-        final path = result.first.path ?? result.first.name;
+      final result = await FilePicker.platform.pickFiles(type: FileType.image);
+      if (result != null && result.files.isNotEmpty) {
+        final path = result.files.first.path ?? result.files.first.name;
         ref.read(authServiceProvider).updateProfileImage(path);
       } else {
         const sampleUrl = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400';
