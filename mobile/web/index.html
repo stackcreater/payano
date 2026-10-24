@@ -28,16 +28,94 @@
   <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
 
   <style>
-    body {
+    * { box-sizing: border-box; }
+    html, body {
       margin: 0;
       padding: 0;
+      width: 100%;
+      height: 100%;
       background-color: #0b111e;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
+
+    /* ── Loading Splash Screen ── */
+    #loading-indicator {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(160deg, #0b111e 0%, #0f1f3d 100%);
+      z-index: 9999;
+      transition: opacity 0.5s ease;
+    }
+    .payano-logo-wrap {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .payano-icon {
+      width: 48px;
+      height: 48px;
+      background: #2563eb;
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .payano-icon svg {
+      width: 28px;
+      height: 28px;
+      fill: white;
+    }
+    .brand-title {
+      font-size: 30px;
+      font-weight: 800;
+      letter-spacing: 3px;
+      color: #ffffff;
+    }
+    .brand-subtitle {
+      font-size: 12px;
+      color: #64748b;
+      margin-top: 4px;
+      margin-bottom: 32px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+    /* Animated motorcycle track */
+    .track {
+      position: relative;
+      width: 180px;
+      height: 4px;
+      background: rgba(255,255,255,0.08);
+      border-radius: 4px;
+      overflow: hidden;
+      margin-bottom: 20px;
+    }
+    .track-fill {
+      position: absolute;
+      left: -60%;
+      top: 0;
+      width: 60%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, #2563eb, #60a5fa, transparent);
+      border-radius: 4px;
+      animation: sweep 1.4s ease-in-out infinite;
+    }
+    @keyframes sweep {
+      0%   { left: -60%; }
+      100% { left: 110%; }
+    }
+    .loading-label {
+      font-size: 12px;
+      color: #475569;
+      letter-spacing: 0.5px;
+    }
+
     /* MapLibre GL JS — ensure canvas fills the Flutter platform view container */
-    .maplibregl-canvas-container {
-      width: 100% !important;
-      height: 100% !important;
-    }
+    .maplibregl-canvas-container,
     .maplibregl-canvas {
       width: 100% !important;
       height: 100% !important;
@@ -45,8 +123,42 @@
   </style>
 </head>
 <body>
+
+  <!-- ── Instant branded loading splash (shown while Flutter JS downloads) ── -->
+  <div id="loading-indicator">
+    <div class="payano-logo-wrap">
+      <div class="payano-icon">
+        <!-- motorcycle silhouette -->
+        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path d="M19 7l-1.5-3H14v2h2.5l1 2H14c-1.1 0-2 .9-2 2v1H6C4.3 11 3 12.3 3 14s1.3 3 3 3c1.5 0 2.7-1 3-2.4L10.6 13H12v1c0 1.1.9 2 2 2h1c.3 1.4 1.5 2.5 3 2.5 1.7 0 3-1.3 3-3s-1.3-3-3-3c-.4 0-.7.1-1 .2V9c0-.6-.4-1.1-1-1.2V7h3zm-1 7c.6 0 1 .4 1 1s-.4 1-1 1-1-.4-1-1 .4-1 1-1zM6 15c-.6 0-1-.4-1-1s.4-1 1-1 1 .4 1 1-.4 1-1 1z"/>
+        </svg>
+      </div>
+      <div class="brand-title">PAYANO</div>
+    </div>
+    <div class="brand-subtitle">Urban Two-Wheeler Mobility</div>
+    <div class="track"><div class="track-fill"></div></div>
+    <div class="loading-label">Starting up...</div>
+  </div>
+
   <!-- reCAPTCHA container required for Firebase Phone Auth on web -->
   <div id="recaptcha-container"></div>
+
+  <script>
+    // Remove loader on Flutter first-frame event (fired by Flutter engine)
+    function removeLoader() {
+      var loader = document.getElementById('loading-indicator');
+      if (!loader) return;
+      loader.style.opacity = '0';
+      setTimeout(function () {
+        if (loader && loader.parentNode) loader.parentNode.removeChild(loader);
+      }, 500);
+    }
+    window.addEventListener('flutter-first-frame', removeLoader);
+    // Safety fallback: hide loader after 10s max regardless
+    window.addEventListener('load', function () {
+      setTimeout(removeLoader, 10000);
+    });
+  </script>
 
   <script src="flutter_bootstrap.js" async></script>
 </body>

@@ -211,6 +211,27 @@ def run_tests():
         assert res.json()["status"] == "CANCELLED"
     test("POST /rides/cancel (Cancel Ride)", test_cancel_ride)
 
+    # 10. Upstash Redis Monitoring & Audit Log Endpoints
+    def test_redis_health():
+        res = client.get("/redis/health")
+        assert res.status_code == 200
+        assert res.json()["redis_connected"] is True
+    test("GET /redis/health (Upstash Redis Connection Health)", test_redis_health)
+
+    def test_redis_online_drivers():
+        res = client.get("/redis/drivers/online")
+        assert res.status_code == 200
+        assert res.json()["status"] == "success"
+    test("GET /redis/drivers/online (Upstash Redis Online Drivers)", test_redis_online_drivers)
+
+    def test_redis_activity_logs():
+        res = client.get(f"/redis/activity/driver/{DRIVER_UID}")
+        assert res.status_code == 200
+        assert res.json()["status"] == "success"
+        assert res.json()["count"] > 0
+    test("GET /redis/activity/{entity_type}/{entity_id} (Upstash Redis Audit Logs)", test_redis_activity_logs)
+
+
     print("-" * 60)
     print(f"RESULTS: Passed = {results['passed']}, Failed = {results['failed']}")
     if results["issues"]:

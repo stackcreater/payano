@@ -1,13 +1,16 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 
 import '../../../core/services/websocket_location_service.dart';
 import '../../../core/services/ride_service.dart';
 import '../../../core/services/map_service.dart';
+import '../../../core/services/location_service.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/payano_avatar.dart';
 
 enum RideStage { headingToPickup, arrivedAtPickup, inTrip, completed }
 
@@ -17,9 +20,11 @@ class DriverTrackingScreen extends ConsumerStatefulWidget {
   final String rideId;
   final String driverId;
   final String passengerName;
+  final String? passengerPhotoUrl;
   final String pickupAddress;
   final String dropoffAddress;
   final LatLng pickupLocation;
+  final LatLng dropoffLocation;
   final LatLng initialDriverLocation;
 
   const DriverTrackingScreen({
@@ -27,9 +32,11 @@ class DriverTrackingScreen extends ConsumerStatefulWidget {
     this.rideId = 'ride_101',
     this.driverId = 'drv_driver_01',
     this.passengerName = 'Ananya Sharma',
+    this.passengerPhotoUrl,
     this.pickupAddress = 'MG Road Metro Station Exit B, Bengaluru',
     this.dropoffAddress = 'Koramangala 5th Block, Bengaluru',
     this.pickupLocation = const LatLng(12.9716, 77.5946),
+    this.dropoffLocation = const LatLng(12.9352, 77.6245),
     this.initialDriverLocation = const LatLng(12.9780, 77.5900),
   });
 
@@ -42,16 +49,19 @@ class _DriverTrackingScreenState extends ConsumerState<DriverTrackingScreen> {
   final MapService _mapService = MapService();
   final WebSocketLocationService _wsService = WebSocketLocationService();
   late final RideService _rideService = ref.read(rideServiceProvider);
+  late final LocationService _locationService = ref.read(locationServiceProvider);
 
   // ─── Map ───────────────────────────────────────────────────────────────────
   MapLibreMapController? _mapController;
   Symbol? _driverSymbol;
   Symbol? _passengerSymbol;
+  Symbol? _dropoffSymbol;
   Line? _routeLine;
 
-  // ─── Timers ────────────────────────────────────────────────────────────────
+  // ─── Timers & Streams ──────────────────────────────────────────────────────
   Timer? _locationPushTimer;
   Timer? _routeRecalculateTimer;
+  StreamSubscription<Position>? _positionStreamSub;
 
   // ─── State ─────────────────────────────────────────────────────────────────
   LatLng? _currentDriverLocation;
@@ -65,12 +75,38 @@ class _DriverTrackingScreenState extends ConsumerState<DriverTrackingScreen> {
   void initState() {
     super.initState();
     _currentDriverLocation = widget.initialDriverLocation;
+    _initDeviceLocation();
+  }
+
+  /// Check GPS permission and initialize with device location if available
+  Future<void> _initDeviceLocation() async {
+    try {
+      final pos = await _locationService.getCurrentPosition();
+      final lat = pos['latitude'] as double?;
+      final lng = pos['longitude'] as double?;
+      if (lat != null && lng != null && mounted) {
+        debugPrint('[DriverTracking] Real GPS accessed: lat=$lat, lng=$lng');
+        setState(() {
+          _currentDriverLocation = LatLng(lat, lng);
+        });
+        if (_driverSymbol != null && _mapController != null) {
+          _mapController!.updateSymbol(
+            _driverSymbol!,
+            SymbolOptions(geometry: _currentDriverLocation),
+          );
+        }
+        _fetchRoute();
+      }
+    } catch (e) {
+      debugPrint('[DriverTracking] GPS access fallback to initial: $e');
+    }
   }
 
   @override
   void dispose() {
     _locationPushTimer?.cancel();
     _routeRecalculateTimer?.cancel();
+    _positionStreamSub?.cancel();
     _mapController?.dispose();
     _wsService.dispose();
     super.dispose();
@@ -85,7 +121,7 @@ class _DriverTrackingScreenState extends ConsumerState<DriverTrackingScreen> {
   void _onStyleLoaded() async {
     if (_mapController == null) return;
 
-    // Passenger pickup marker
+    // 1. Passenger pickup marker (Green)
     _passengerSymbol = await _mapController!.addSymbol(
       SymbolOptions(
         geometry: widget.pickupLocation,
@@ -99,7 +135,21 @@ class _DriverTrackingScreenState extends ConsumerState<DriverTrackingScreen> {
       ),
     );
 
-    // Driver live marker
+    // 2. Dropoff destination marker (Red / Primary)
+    _dropoffSymbol = await _mapController!.addSymbol(
+      SymbolOptions(
+        geometry: widget.dropoffLocation,
+        iconImage: 'marker-15',
+        iconSize: 2.2,
+        textField: 'Drop: ${widget.dropoffAddress.split(',').first}',
+        textOffset: const Offset(0, 1.8),
+        textColor: '#EF4444',
+        textHaloColor: '#FFFFFF',
+        textHaloWidth: 1.5,
+      ),
+    );
+
+    // 3. Driver live marker (Blue)
     _driverSymbol = await _mapController!.addSymbol(
       SymbolOptions(
         geometry: _currentDriverLocation,
@@ -134,10 +184,12 @@ class _DriverTrackingScreenState extends ConsumerState<DriverTrackingScreen> {
   Future<void> _fetchRoute() async {
     if (_currentDriverLocation == null) return;
 
-    final destination = _currentStage == RideStage.headingToPickup ||
-            _currentStage == RideStage.arrivedAtPickup
-        ? widget.pickupLocation
-        : widget.pickupLocation; // TODO: swap to dropoff when in-trip navigation is added
+    final isHeadingToPickup = _currentStage == RideStage.headingToPickup ||
+        _currentStage == RideStage.arrivedAtPickup;
+    final destination = isHeadingToPickup ? widget.pickupLocation : widget.dropoffLocation;
+    final targetLabel = isHeadingToPickup ? 'Pickup' : 'Drop-off';
+
+    debugPrint('[DriverTracking] Calculating route to $targetLabel: (${destination.latitude}, ${destination.longitude})');
 
     final result = await _mapService.calculateRoute(
       start: _currentDriverLocation!,
@@ -153,25 +205,58 @@ class _DriverTrackingScreenState extends ConsumerState<DriverTrackingScreen> {
 
   Future<void> _drawOrUpdatePolyline(List<LatLng> points) async {
     if (_mapController == null || points.isEmpty) return;
+    final isHeadingToPickup = _currentStage == RideStage.headingToPickup ||
+        _currentStage == RideStage.arrivedAtPickup;
+    final lineColor = isHeadingToPickup ? '#2563EB' : '#10B981';
+
     if (_routeLine == null) {
       _routeLine = await _mapController!.addLine(
         LineOptions(
           geometry: points,
-          lineColor: '#2563EB',
+          lineColor: lineColor,
           lineWidth: 5.5,
           lineOpacity: 0.85,
           lineJoin: 'round',
         ),
       );
     } else {
-      await _mapController!.updateLine(_routeLine!, LineOptions(geometry: points));
+      await _mapController!.updateLine(
+        _routeLine!,
+        LineOptions(geometry: points, lineColor: lineColor),
+      );
     }
   }
 
-  // ─── Location Push ─────────────────────────────────────────────────────────
-
-  /// Throttled periodic GPS push to FastAPI WebSocket backend
+  /// Real-time live GPS stream from device + periodic heartbeat push to FastAPI WebSocket
   void _startLocationPusher() {
+    // 1. Continuous device GPS position listener
+    _positionStreamSub = _locationService.getPositionStream(distanceFilterMeters: 5).listen((pos) {
+      if (!mounted) return;
+      final newLoc = LatLng(pos.latitude, pos.longitude);
+      final newHeading = pos.heading != 0 ? pos.heading : _driverHeading;
+
+      setState(() {
+        _currentDriverLocation = newLoc;
+        _driverHeading = newHeading;
+      });
+
+      if (_driverSymbol != null && _mapController != null) {
+        _mapController!.updateSymbol(
+          _driverSymbol!,
+          SymbolOptions(geometry: newLoc, iconRotate: newHeading),
+        );
+      }
+
+      // Live push updated location to WebSocket
+      _wsService.sendDriverLocation(
+        driverId: widget.driverId,
+        location: newLoc,
+        heading: newHeading,
+        rideId: widget.rideId,
+      );
+    });
+
+    // 2. Periodic fallback push (heartbeat every 6 seconds)
     _locationPushTimer = Timer.periodic(const Duration(seconds: 6), (_) {
       if (_currentDriverLocation != null) {
         _wsService.sendDriverLocation(
@@ -188,7 +273,10 @@ class _DriverTrackingScreenState extends ConsumerState<DriverTrackingScreen> {
 
   void _simulateStepForward() {
     if (_currentDriverLocation == null) return;
-    final target = widget.pickupLocation;
+    final isHeadingToPickup = _currentStage == RideStage.headingToPickup ||
+        _currentStage == RideStage.arrivedAtPickup;
+    final target = isHeadingToPickup ? widget.pickupLocation : widget.dropoffLocation;
+
     final newLat = _currentDriverLocation!.latitude +
         (target.latitude - _currentDriverLocation!.latitude) * 0.25;
     final newLng = _currentDriverLocation!.longitude +
@@ -244,14 +332,22 @@ class _DriverTrackingScreenState extends ConsumerState<DriverTrackingScreen> {
           _wsService.sendRideStatus('TRIP_STARTED');
           await _rideService.updateRideStatus(widget.rideId, 'TRIP_STARTED');
           setState(() => _currentStage = RideStage.inTrip);
+          if (_passengerSymbol != null && _mapController != null) {
+            _mapController!.updateSymbol(
+              _passengerSymbol!,
+              const SymbolOptions(textColor: '#6B7280', textField: 'Picked up ✓'),
+            );
+          }
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
-                content: Text('🛵 Trip Started! Safe riding.'),
+                content: Text('🛵 Trip Started! Navigating to Drop-off.'),
                 backgroundColor: Colors.blue,
               ),
             );
           }
+          // Recalculate route immediately to the dropoff place!
+          await _fetchRoute();
           break;
 
         case RideStage.inTrip:
@@ -260,6 +356,12 @@ class _DriverTrackingScreenState extends ConsumerState<DriverTrackingScreen> {
           await _rideService.updateRideStatus(widget.rideId, 'TRIP_COMPLETED');
           _locationPushTimer?.cancel(); // Stop pushing location
           setState(() => _currentStage = RideStage.completed);
+          if (_dropoffSymbol != null && _mapController != null) {
+            _mapController!.updateSymbol(
+              _dropoffSymbol!,
+              const SymbolOptions(textColor: '#10B981', textField: 'Dropped off ✓'),
+            );
+          }
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
@@ -334,8 +436,8 @@ class _DriverTrackingScreenState extends ConsumerState<DriverTrackingScreen> {
                       const SizedBox(width: 8),
                       Text(
                         _isLoadingRoute
-                            ? 'Navigating...'
-                            : '${_currentRoute.distanceKm} km to pickup (${_currentRoute.durationMinutes.round()} min)',
+                            ? 'Calculating route...'
+                            : '${_currentRoute.distanceKm} km to ${_currentStage == RideStage.inTrip ? "drop-off" : "pickup"} (${_currentRoute.durationMinutes.round()} min)',
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 13,
@@ -438,17 +540,10 @@ class _DriverTrackingScreenState extends ConsumerState<DriverTrackingScreen> {
             // Passenger info
             Row(
               children: [
-                CircleAvatar(
+                PayanoAvatar(
+                  name: widget.passengerName,
+                  imageUrl: widget.passengerPhotoUrl,
                   radius: 24,
-                  backgroundColor: AppColors.primary.withOpacity(0.12),
-                  child: Text(
-                    widget.passengerName.substring(0, 1),
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.primary,
-                    ),
-                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(

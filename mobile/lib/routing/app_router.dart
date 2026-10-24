@@ -1,4 +1,5 @@
 import 'package:go_router/go_router.dart';
+import 'package:maplibre_gl/maplibre_gl.dart';
 import '../features/auth/presentation/splash_screen.dart';
 import '../features/onboarding/presentation/onboarding_screen.dart';
 import '../features/auth/presentation/login_screen.dart';
@@ -178,11 +179,40 @@ class AppRouter {
       ),
       GoRoute(
         path: '/passenger-tracking',
-        builder: (context, state) => const PassengerTrackingScreen(),
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>? ?? {};
+          return PassengerTrackingScreen(
+            rideId: extra['rideId'] as String? ?? 'ride_101',
+            driverId: extra['driverId'] as String? ?? 'drv_driver_01',
+            driverName: extra['driverName'] as String? ?? 'Ramesh Kumar',
+            driverPhotoUrl: extra['driverPhotoUrl'] as String?,
+            vehicleInfo: extra['vehicleInfo'] as String? ?? 'Payano Moto (Hero Splendor+)',
+            registrationNo: extra['registrationNo'] as String? ?? 'KA-01-ET-8821',
+            driverRating: (extra['driverRating'] as num?)?.toDouble() ?? 4.9,
+            passengerLocation: extra['passengerLocation'] as LatLng? ?? const LatLng(12.9716, 77.5946),
+            destinationLocation: extra['destinationLocation'] as LatLng? ?? const LatLng(12.9352, 77.6245),
+            initialDriverLocation: extra['initialDriverLocation'] as LatLng? ?? const LatLng(12.9780, 77.5900),
+            pickupAddress: extra['pickupAddress'] as String? ?? 'MG Road Metro Station, Bengaluru',
+            destinationAddress: extra['destinationAddress'] as String? ?? 'Koramangala 5th Block, Bengaluru',
+          );
+        },
       ),
       GoRoute(
         path: '/driver-tracking',
-        builder: (context, state) => const DriverTrackingScreen(),
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>? ?? {};
+          return DriverTrackingScreen(
+            rideId: extra['rideId'] as String? ?? 'ride_101',
+            driverId: extra['driverId'] as String? ?? 'drv_driver_01',
+            passengerName: extra['passengerName'] as String? ?? 'Ananya Sharma',
+            passengerPhotoUrl: extra['passengerPhotoUrl'] as String?,
+            pickupAddress: extra['pickupAddress'] as String? ?? 'MG Road Metro Station Exit B, Bengaluru',
+            dropoffAddress: extra['dropoffAddress'] as String? ?? 'Koramangala 5th Block, Bengaluru',
+            pickupLocation: extra['pickupLocation'] as LatLng? ?? const LatLng(12.9716, 77.5946),
+            dropoffLocation: extra['dropoffLocation'] as LatLng? ?? const LatLng(12.9352, 77.6245),
+            initialDriverLocation: extra['initialDriverLocation'] as LatLng? ?? const LatLng(12.9780, 77.5900),
+          );
+        },
       ),
     ],
   );

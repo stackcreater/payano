@@ -33,32 +33,66 @@ class RouteResult {
 class MapService {
   final Dio _dio = Dio(
     BaseOptions(
-      connectTimeout: const Duration(seconds: 10),
-      receiveTimeout: const Duration(seconds: 10),
+      connectTimeout: const Duration(seconds: 5),
+      receiveTimeout: const Duration(seconds: 5),
+      headers: {
+        'User-Agent': 'PayanoApp/1.0 (Ride-Sharing Platform; contact@payano.app)',
+        'Accept': 'application/json',
+      },
     ),
   );
 
-  // Local OSM raster tile style asset (avoids yellow demotiles fill, no API key needed)
-  static const String freeMapStyle = 'assets/map/osm_raster_style.json';
+  // Inline MapLibre style — works on both web and mobile without asset loading issues
+  static const String freeMapStyle = '''{
+    "version": 8,
+    "name": "OSM Raster Tiles",
+    "sources": {
+      "osm": {
+        "type": "raster",
+        "tiles": ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+        "tileSize": 256,
+        "attribution": "&copy; OpenStreetMap contributors"
+      }
+    },
+    "layers": [
+      {
+        "id": "osm",
+        "type": "raster",
+        "source": "osm",
+        "paint": { "raster-opacity": 1 }
+      }
+    ]
+  }''';
 
-  /// Primary Routing: Valhalla API (https://valhalla1.openstreetmap.de)
-  /// Fallback Routing: OSRM API (https://router.project-osrm.org)
+  /// Primary Routing: OSRM API (https://router.project-osrm.org)
+  /// Fallback Routing: Valhalla API (https://valhalla1.openstreetmap.de)
+  /// Offline Fallback: Haversine linear interpolation
   Future<RouteResult> calculateRoute({
     required LatLng start,
     required LatLng destination,
   }) async {
+    debugPrint('[MapService] Calculating route: (${start.latitude}, ${start.longitude}) -> (${destination.latitude}, ${destination.longitude})');
     try {
-      // 1. Try Valhalla Public API
-      return await _calculateValhallaRoute(start, destination);
-    } catch (e) {
-      debugPrint('Valhalla routing failed ($e). Falling back to OSRM API...');
+      // 1. Try OSRM Public Driving Routing API (fastest & most reliable)
+      final result = await _calculateOSRMRoute(start, destination);
+      debugPrint('[MapService] ✓ Route calculated via OSRM: ${result.distanceKm} km, ${result.durationMinutes} min, ${result.points.length} waypoints');
+      return result;
+    } catch (osrmError) {
+      if (osrmError is DioException) {
+        debugPrint('[MapService] OSRM error response: ${osrmError.response?.statusCode} -> ${osrmError.response?.data}');
+      }
+      debugPrint('[MapService] OSRM routing failed ($osrmError). Trying Valhalla API...');
       try {
-        // 2. Fallback to OSRM Public API
-        return await _calculateOSRMRoute(start, destination);
-      } catch (osrmError) {
-        debugPrint('OSRM routing failed ($osrmError). Generating direct fallback polyline...');
+        // 2. Fallback to Valhalla Public API
+        final result = await _calculateValhallaRoute(start, destination);
+        debugPrint('[MapService] ✓ Route calculated via Valhalla: ${result.distanceKm} km, ${result.durationMinutes} min, ${result.points.length} waypoints');
+        return result;
+      } catch (valhallaError) {
+        debugPrint('[MapService] Valhalla routing failed ($valhallaError). Using direct Haversine fallback polyline...');
         // 3. Fallback to straight line / linear interpolation polyline if API calls fail
-        return _generateDirectPolyline(start, destination);
+        final result = _generateDirectPolyline(start, destination);
+        debugPrint('[MapService] ✓ Fallback route generated: ${result.distanceKm} km (Haversine), ${result.durationMinutes} min');
+        return result;
       }
     }
   }
@@ -112,10 +146,16 @@ class MapService {
 
   /// Calculates route using OSRM Public Routing API
   Future<RouteResult> _calculateOSRMRoute(LatLng start, LatLng end) async {
-    final url =
-        'https://router.project-osrm.org/route/v1/driving/${start.longitude},${start.latitude};${end.longitude},${end.latitude}?overview=full&geometries=geojson';
+    final sLng = start.longitude.toStringAsFixed(6);
+    final sLat = start.latitude.toStringAsFixed(6);
+    final eLng = end.longitude.toStringAsFixed(6);
+    final eLat = end.latitude.toStringAsFixed(6);
 
-    final response = await _dio.get(url);
+    final uri = Uri.parse(
+      'https://router.project-osrm.org/route/v1/driving/$sLng,$sLat;$eLng,$eLat?overview=full&geometries=geojson',
+    );
+
+    final response = await _dio.getUri(uri);
 
     if (response.statusCode == 200 && response.data != null) {
       final data = response.data is String ? jsonDecode(response.data) : response.data;

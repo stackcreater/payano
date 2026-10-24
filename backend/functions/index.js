@@ -3,6 +3,8 @@ const admin = require('firebase-admin');
 const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
+const redisClient = require('./redis_client');
+
 
 let serviceAccount;
 try {

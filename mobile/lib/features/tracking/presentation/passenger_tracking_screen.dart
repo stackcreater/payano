@@ -7,29 +7,39 @@ import 'package:maplibre_gl/maplibre_gl.dart';
 
 import '../../../core/services/websocket_location_service.dart';
 import '../../../core/services/map_service.dart';
+import '../../../core/services/location_service.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/payano_avatar.dart';
 
 /// Screen for Passengers to track the driver's real-time location, ETA, and ride status
 class PassengerTrackingScreen extends ConsumerStatefulWidget {
   final String rideId;
   final String driverId;
   final String driverName;
+  final String? driverPhotoUrl;
   final String vehicleInfo;
   final String registrationNo;
   final double driverRating;
   final LatLng passengerLocation;
+  final LatLng destinationLocation;
   final LatLng initialDriverLocation;
+  final String pickupAddress;
+  final String destinationAddress;
 
   const PassengerTrackingScreen({
     super.key,
     this.rideId = 'ride_101',
     this.driverId = 'drv_driver_01',
     this.driverName = 'Ramesh Kumar',
+    this.driverPhotoUrl,
     this.vehicleInfo = 'Payano Moto (Hero Splendor+)',
     this.registrationNo = 'KA-01-ET-8821',
     this.driverRating = 4.9,
     this.passengerLocation = const LatLng(12.9716, 77.5946), // MG Road
+    this.destinationLocation = const LatLng(12.9352, 77.6245), // Koramangala
     this.initialDriverLocation = const LatLng(12.9780, 77.5900),
+    this.pickupAddress = 'MG Road Metro Station, Bengaluru',
+    this.destinationAddress = 'Koramangala 5th Block, Bengaluru',
   });
 
   @override
@@ -41,11 +51,13 @@ class _PassengerTrackingScreenState extends ConsumerState<PassengerTrackingScree
   // ─── Services ──────────────────────────────────────────────────────────────
   final MapService _mapService = MapService();
   final WebSocketLocationService _wsService = WebSocketLocationService();
+  late final LocationService _locationService = ref.read(locationServiceProvider);
 
   // ─── Map ───────────────────────────────────────────────────────────────────
   MapLibreMapController? _mapController;
   Symbol? _driverSymbol;
   Symbol? _passengerSymbol;
+  Symbol? _destinationSymbol;
   Line? _routeLine;
 
   // ─── Subscriptions ─────────────────────────────────────────────────────────
@@ -54,6 +66,7 @@ class _PassengerTrackingScreenState extends ConsumerState<PassengerTrackingScree
 
   // ─── State ─────────────────────────────────────────────────────────────────
   LatLng? _currentDriverLocation;
+  LatLng? _currentPassengerLocation;
   double _driverHeading = 0.0;
   RouteResult _currentRoute = RouteResult.empty();
   bool _isLoadingRoute = true;
@@ -69,12 +82,43 @@ class _PassengerTrackingScreenState extends ConsumerState<PassengerTrackingScree
   void initState() {
     super.initState();
     _currentDriverLocation = widget.initialDriverLocation;
+    _currentPassengerLocation = widget.passengerLocation;
 
     _statusPulseCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1200),
     )..repeat(reverse: true);
     _statusPulseAnim = Tween<double>(begin: 0.7, end: 1.0).animate(_statusPulseCtrl);
+
+    _initPassengerLocation();
+  }
+
+  /// Automatically requests device GPS permission and fetches passenger's live position
+  Future<void> _initPassengerLocation() async {
+    try {
+      final hasPerm = await _locationService.checkAndRequestPermission();
+      if (hasPerm) {
+        final pos = await _locationService.getCurrentPosition();
+        final lat = pos['latitude'] as double?;
+        final lng = pos['longitude'] as double?;
+        if (lat != null && lng != null && mounted) {
+          debugPrint('[PassengerTracking] Live GPS retrieved for Passenger: $lat, $lng');
+          final newPassengerLoc = LatLng(lat, lng);
+          setState(() {
+            _currentPassengerLocation = newPassengerLoc;
+          });
+          if (_passengerSymbol != null && _mapController != null) {
+            _mapController!.updateSymbol(
+              _passengerSymbol!,
+              SymbolOptions(geometry: newPassengerLoc),
+            );
+          }
+          _fetchRoute();
+        }
+      }
+    } catch (e) {
+      debugPrint('[PassengerTracking] Location error: $e');
+    }
   }
 
   @override
@@ -96,13 +140,13 @@ class _PassengerTrackingScreenState extends ConsumerState<PassengerTrackingScree
   void _onStyleLoaded() async {
     if (_mapController == null) return;
 
-    // Passenger pickup marker
+    // 1. Passenger pickup marker (Green)
     _passengerSymbol = await _mapController!.addSymbol(
       SymbolOptions(
         geometry: widget.passengerLocation,
         iconImage: 'marker-15',
         iconSize: 2.0,
-        textField: 'Pickup Location',
+        textField: 'Pickup: ${widget.pickupAddress.split(",").first}',
         textOffset: const Offset(0, 1.8),
         textColor: '#10B981',
         textHaloColor: '#FFFFFF',
@@ -110,7 +154,21 @@ class _PassengerTrackingScreenState extends ConsumerState<PassengerTrackingScree
       ),
     );
 
-    // Driver moving marker
+    // 2. Dropoff destination marker (Red)
+    _destinationSymbol = await _mapController!.addSymbol(
+      SymbolOptions(
+        geometry: widget.destinationLocation,
+        iconImage: 'marker-15',
+        iconSize: 2.0,
+        textField: 'Drop: ${widget.destinationAddress.split(",").first}',
+        textOffset: const Offset(0, 1.8),
+        textColor: '#EF4444',
+        textHaloColor: '#FFFFFF',
+        textHaloWidth: 1.5,
+      ),
+    );
+
+    // 3. Driver moving marker (Blue)
     _driverSymbol = await _mapController!.addSymbol(
       SymbolOptions(
         geometry: _currentDriverLocation,
@@ -125,7 +183,7 @@ class _PassengerTrackingScreenState extends ConsumerState<PassengerTrackingScree
       ),
     );
 
-    // Initial route
+    // Initial route calculation
     await _fetchRoute();
 
     // Start WebSocket event subscription
@@ -146,9 +204,16 @@ class _PassengerTrackingScreenState extends ConsumerState<PassengerTrackingScree
         now.difference(_lastRouteFetchTime!).inSeconds < 15) return;
     _lastRouteFetchTime = now;
 
+    final isTripStarted = _rideStatus == 'TRIP_STARTED';
+    final targetDestination = isTripStarted
+        ? widget.destinationLocation
+        : (_currentPassengerLocation ?? widget.passengerLocation);
+
+    debugPrint('[PassengerTracking] Calculating route to ${isTripStarted ? "Drop-off" : "Pickup"}: (${targetDestination.latitude}, ${targetDestination.longitude})');
+
     final result = await _mapService.calculateRoute(
       start: _currentDriverLocation!,
-      destination: widget.passengerLocation,
+      destination: targetDestination,
     );
     if (!mounted) return;
     setState(() {
@@ -160,18 +225,24 @@ class _PassengerTrackingScreenState extends ConsumerState<PassengerTrackingScree
 
   Future<void> _drawOrUpdatePolyline(List<LatLng> points) async {
     if (_mapController == null || points.isEmpty) return;
+    final isTripStarted = _rideStatus == 'TRIP_STARTED';
+    final lineColor = isTripStarted ? '#10B981' : '#2563EB';
+
     if (_routeLine == null) {
       _routeLine = await _mapController!.addLine(
         LineOptions(
           geometry: points,
-          lineColor: '#2563EB',
+          lineColor: lineColor,
           lineWidth: 5.5,
           lineOpacity: 0.85,
           lineJoin: 'round',
         ),
       );
     } else {
-      await _mapController!.updateLine(_routeLine!, LineOptions(geometry: points));
+      await _mapController!.updateLine(
+        _routeLine!,
+        LineOptions(geometry: points, lineColor: lineColor),
+      );
     }
   }
 
@@ -232,6 +303,16 @@ class _PassengerTrackingScreenState extends ConsumerState<PassengerTrackingScree
     if (!mounted) return;
     setState(() => _rideStatus = status);
 
+    if (status == 'TRIP_STARTED') {
+      if (_passengerSymbol != null && _mapController != null) {
+        _mapController!.updateSymbol(
+          _passengerSymbol!,
+          const SymbolOptions(textColor: '#6B7280', textField: 'Picked up ✓'),
+        );
+      }
+      _fetchRoute();
+    }
+
     // Navigate away when ride is completed
     if ((status == 'TRIP_COMPLETED' || status == 'COMPLETED') && !_isCompleting) {
       _isCompleting = true;
@@ -264,11 +345,13 @@ class _PassengerTrackingScreenState extends ConsumerState<PassengerTrackingScree
       case 'DRIVER_ARRIVING':
         return _isLoadingRoute
             ? 'Calculating ETA...'
-            : 'Arriving in approx ${_currentRoute.durationMinutes.round()} minutes';
+            : 'Arriving in approx ${_currentRoute.durationMinutes.round()} minutes (${_currentRoute.distanceKm} km away)';
       case 'DRIVER_ARRIVED':
         return 'Please proceed to pickup point';
       case 'TRIP_STARTED':
-        return 'Sit back and enjoy the ride';
+        return _isLoadingRoute
+            ? 'Heading to destination...'
+            : 'Heading to destination • approx ${_currentRoute.durationMinutes.round()} min (${_currentRoute.distanceKm} km)';
       default:
         return '';
     }
@@ -471,22 +554,77 @@ class _PassengerTrackingScreenState extends ConsumerState<PassengerTrackingScree
                 ],
               ),
             ),
+            const SizedBox(height: 14),
+
+            // Pickup & Drop-off Place Indicator
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey.shade200),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.circle, color: Color(0xFF10B981), size: 10),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          widget.pickupAddress,
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const Padding(
+                    padding: EdgeInsets.only(left: 4),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: SizedBox(height: 10, child: VerticalDivider(thickness: 1, color: Colors.grey)),
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      const Icon(Icons.location_on, color: Color(0xFFEF4444), size: 14),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          widget.destinationAddress,
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (_currentRoute.distanceKm > 0)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFDBEAFE),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            '${_currentRoute.distanceKm} km',
+                            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF1E40AF)),
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
             const Divider(height: 24),
 
             // Driver & Vehicle Row
             Row(
               children: [
-                CircleAvatar(
+                PayanoAvatar(
+                  name: widget.driverName,
+                  imageUrl: widget.driverPhotoUrl,
                   radius: 26,
-                  backgroundColor: AppColors.primary.withOpacity(0.15),
-                  child: Text(
-                    widget.driverName.substring(0, 1),
-                    style: const TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.primary,
-                    ),
-                  ),
                 ),
                 const SizedBox(width: 14),
                 Expanded(

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'payano_avatar.dart';
 import '../../shared/models/ride_model.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
@@ -93,10 +94,10 @@ class DriverCard extends StatelessWidget {
           Row(
             children: [
               // Avatar
-              CircleAvatar(
+              PayanoAvatar(
+                name: ride.driverName ?? 'Driver',
+                imageUrl: ride.driverProfileImage,
                 radius: 26,
-                backgroundColor: AppColors.primary.withAlpha(40),
-                child: const Icon(Icons.person, color: AppColors.primary, size: 30),
               ),
               const SizedBox(width: 14),
 

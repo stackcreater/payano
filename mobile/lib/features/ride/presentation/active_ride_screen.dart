@@ -161,6 +161,36 @@ class ActiveRideScreen extends ConsumerWidget {
                     ),
                   ),
 
+                  // Live Navigation Tracker Shortcut
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF1A6DF8),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      onPressed: () {
+                        context.push('/passenger-tracking', extra: {
+                          'rideId': currentRide.id,
+                          'driverId': currentRide.driverId,
+                          'driverName': currentRide.driverName,
+                          'driverPhotoUrl': currentRide.driverProfileImage,
+                          'vehicleInfo': '${currentRide.driverVehicle?.modelName ?? "Payano Moto"} (${currentRide.driverVehicle?.color ?? "Yellow"})',
+                          'registrationNo': currentRide.driverVehicle?.registrationNumber ?? 'KA-01-ET-8821',
+                          'passengerLocation': LatLng(currentRide.pickup.latitude, currentRide.pickup.longitude),
+                          'destinationLocation': LatLng(currentRide.destination.latitude, currentRide.destination.longitude),
+                          'pickupAddress': currentRide.pickup.address,
+                          'destinationAddress': currentRide.destination.address,
+                        });
+                      },
+                      icon: const Icon(Icons.navigation_rounded, size: 18),
+                      label: const Text('Live Map & Road Navigation', style: TextStyle(fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+
                   // Matched Driver Card
                   DriverCard(
                     ride: currentRide,

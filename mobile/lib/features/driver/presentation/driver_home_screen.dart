@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../../../core/widgets/payano_map_widget.dart';
+import '../../../core/widgets/payano_avatar.dart';
 import '../../../core/services/auth_service.dart';
+import '../../../core/services/location_service.dart';
 import '../../../shared/models/user_model.dart';
 import 'providers/driver_flow_provider.dart';
 
@@ -120,9 +123,9 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
                     const SizedBox(width: 10),
                     GestureDetector(
                       onTap: () => context.push('/driver/profile'),
-                      child: _circleButton(
-                        icon: Icons.person_outline_rounded,
-                        onTap: () => context.push('/driver/profile'),
+                      child: PayanoAvatar(
+                        name: flow.profile.name,
+                        radius: 19,
                       ),
                     ),
                   ],
@@ -435,7 +438,19 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 elevation: 0,
               ),
-              onPressed: () => notifier.goOnline(),
+              onPressed: () async {
+                final locService = ref.read(locationServiceProvider);
+                final hasPerm = await locService.checkAndRequestPermission();
+                if (!hasPerm && mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Please enable GPS / Location permissions to get ride requests nearby.'),
+                      backgroundColor: Colors.amber,
+                    ),
+                  );
+                }
+                notifier.goOnline();
+              },
               icon: const Icon(Icons.power_settings_new_rounded, color: Colors.white, size: 20),
               label: const Text(
                 'GO ONLINE',
@@ -709,7 +724,13 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
                     children: [
                       _circleButton(icon: Icons.notifications_none_rounded, onTap: () {}),
                       const SizedBox(width: 8),
-                      _circleButton(icon: Icons.person_outline_rounded, onTap: () => context.push('/driver/profile')),
+                      GestureDetector(
+                        onTap: () => context.push('/driver/profile'),
+                        child: PayanoAvatar(
+                          name: flow.profile.name,
+                          radius: 18,
+                        ),
+                      ),
                     ],
                   ),
                 ],
@@ -791,10 +812,10 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
             // Rider Row
             Row(
               children: [
-                CircleAvatar(
+                PayanoAvatar(
+                  name: ride.riderName,
+                  imageUrl: ride.riderPhoto,
                   radius: 22,
-                  backgroundColor: const Color(0xFFF1F5F9),
-                  child: const Icon(Icons.person_outline_rounded, color: Colors.black87, size: 24),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -912,34 +933,49 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
   // SCREEN 51: NAVIGATE TO RIDER (51.Navigate to Rider.png)
   // ===========================================================================
   Widget _buildTopNavigatePill(dynamic ride) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 8, offset: Offset(0, 2))],
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.navigation_rounded, color: Color(0xFF1A6DF8), size: 22),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
-                Text('Navigate to rider', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-                Text('Head to pickup location', style: TextStyle(fontSize: 10, color: Color(0xFF64748B))),
+    return GestureDetector(
+      onTap: () {
+        context.push('/driver-tracking', extra: {
+          'rideId': ride.id,
+          'driverId': 'drv_driver_01',
+          'passengerName': ride.riderName,
+          'passengerPhotoUrl': ride.riderPhoto,
+          'pickupAddress': ride.pickupAddress,
+          'dropoffAddress': ride.dropAddress,
+          'pickupLocation': LatLng(11.6756, 78.1470),
+          'dropoffLocation': LatLng(11.6648, 78.1460),
+          'initialDriverLocation': LatLng(11.6520, 78.1340),
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 8, offset: Offset(0, 2))],
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.navigation_rounded, color: Color(0xFF1A6DF8), size: 22),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: const [
+                  Text('Navigate to rider (Tap for Turn-by-Turn)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                  Text('Head to pickup location', style: TextStyle(fontSize: 10, color: Color(0xFF64748B))),
+                ],
+              ),
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text('${ride.pickupMin} min • ${ride.pickupKm} km', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF1A6DF8))),
+                const Text('Estimated time & distance', style: TextStyle(fontSize: 9, color: Color(0xFF64748B))),
               ],
             ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: const [
-              Text('3 min • 0.8 km', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF1A6DF8))),
-              Text('Estimated time & distance', style: TextStyle(fontSize: 9, color: Color(0xFF64748B))),
-            ],
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -989,10 +1025,10 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
             // Rider Row
             Row(
               children: [
-                CircleAvatar(
+                PayanoAvatar(
+                  name: ride.riderName,
+                  imageUrl: ride.riderPhoto,
                   radius: 20,
-                  backgroundColor: const Color(0xFFF1F5F9),
-                  child: const Icon(Icons.person_outline_rounded, color: Colors.black87, size: 22),
                 ),
                 const SizedBox(width: 10),
                 Expanded(child: Text(ride.riderName, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold))),
@@ -1114,10 +1150,10 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
 
             Row(
               children: [
-                CircleAvatar(
+                PayanoAvatar(
+                  name: ride.riderName,
+                  imageUrl: ride.riderPhoto,
                   radius: 20,
-                  backgroundColor: const Color(0xFFF1F5F9),
-                  child: const Icon(Icons.person_outline_rounded, color: Colors.black87, size: 22),
                 ),
                 const SizedBox(width: 10),
                 Expanded(child: Text(ride.riderName, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold))),
@@ -1436,16 +1472,41 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: const [
-                      Text('Trip Started', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                      Text('12 min • 4.2 km', style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+                    children: [
+                      const Text('Trip in Progress', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                      Text('${flow.activeRide.dropMin} min • ${flow.activeRide.dropKm} km to drop-off', style: const TextStyle(fontSize: 12, color: Color(0xFF64748B))),
                     ],
                   ),
                 ),
-                const Text('10:24 AM', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                const Text('Live Nav', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF10B981))),
               ],
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 12),
+
+            // Drop-off destination details
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.location_on, color: Color(0xFFEF4444), size: 20),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Drop-off: ${flow.activeRide.dropName}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                        Text(flow.activeRide.dropAddress.replaceAll('\n', ' '), style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)), maxLines: 1, overflow: TextOverflow.ellipsis),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
 
             SizedBox(
               width: double.infinity,
@@ -1514,10 +1575,10 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
               children: [
                 Row(
                   children: [
-                    CircleAvatar(
+                    PayanoAvatar(
+                      name: ride.riderName,
+                      imageUrl: ride.riderPhoto,
                       radius: 20,
-                      backgroundColor: const Color(0xFFEFF6FF),
-                      child: const Icon(Icons.person_outline_rounded, color: Colors.black87, size: 22),
                     ),
                     const SizedBox(width: 10),
                     Column(

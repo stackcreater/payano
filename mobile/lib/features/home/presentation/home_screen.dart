@@ -5,6 +5,7 @@ import 'package:maplibre_gl/maplibre_gl.dart';
 import '../../../core/services/map_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
+import '../../../core/widgets/payano_avatar.dart';
 import '../../../core/services/auth_service.dart';
 import '../../../core/services/location_service.dart';
 import '../../../shared/models/user_model.dart';
@@ -171,10 +172,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 isDark: isDark,
               ),
               const SizedBox(width: 8),
-              _buildTopIconButton(
-                icon: Icons.person_outline_rounded,
+              GestureDetector(
                 onTap: () => context.push('/profile'),
-                isDark: isDark,
+                child: PayanoAvatar(
+                  name: user?.name ?? 'User',
+                  imageUrl: user?.profileImage,
+                  radius: 18,
+                ),
               ),
             ],
           ),

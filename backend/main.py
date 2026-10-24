@@ -90,11 +90,22 @@ def init_firebase():
         print(f"[WARN] Firebase init failed: {e}. Running in mock mode.")
         return False
 
+from redis_client import redis_client
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_firebase()
+    if redis_client.is_configured:
+        redis_ok = await redis_client.ping()
+        if redis_ok:
+            print("[OK] Upstash Redis REST connected (User & Driver actions active)")
+        else:
+            print("[WARN] Upstash Redis REST ping failed")
+    else:
+        print("[WARN] Upstash Redis REST not configured")
     print(f"[OK] Payano FastAPI Backend started on port {PORT}")
     yield
+
 
 # ─── App Setup ───────────────────────────────────────────────────────
 app = FastAPI(
@@ -462,6 +473,14 @@ async def signup(req: SignupRequest):
     # Remove password from response
     response_data = {k: v for k, v in user_data.items() if k != 'password'}
 
+    # Upstash Redis: cache user/driver profile & log action
+    if req.role == 'driver':
+        await redis_client.cache_driver(uid, response_data)
+        await redis_client.log_action("driver", uid, "SIGNUP", {"username": req.username})
+    else:
+        await redis_client.cache_user(uid, response_data)
+        await redis_client.log_action("user", uid, "SIGNUP", {"username": req.username})
+
     return {"status": "success", "message": "Signup successful", "token": token, "user": response_data}
 
 
@@ -517,6 +536,14 @@ async def login(req: LoginRequest):
     if 'uid' not in response_data:
         response_data['uid'] = uid
 
+    # Upstash Redis: cache session profile & log action
+    if req.role == 'driver':
+        await redis_client.cache_driver(uid, response_data)
+        await redis_client.log_action("driver", uid, "LOGIN", {"username": response_data.get("username")})
+    else:
+        await redis_client.cache_user(uid, response_data)
+        await redis_client.log_action("user", uid, "LOGIN", {"username": response_data.get("username")})
+
     return {"status": "success", "message": "Login successful", "token": token, "user": response_data}
 
 
@@ -524,12 +551,29 @@ async def login(req: LoginRequest):
 async def me(current_user: dict = Depends(get_current_user)):
     uid = current_user.get('uid')
     role = current_user.get('role', 'rider')
+
+    # Try Redis Cache first
+    if role == 'driver':
+        cached = await redis_client.get_cached_driver(uid)
+    else:
+        cached = await redis_client.get_cached_user(uid)
+    if cached:
+        return {"status": "success", "user": cached, "source": "redis_cache"}
+
     collection = get_collection(role)
     data = await db_get(collection, uid)
     if not data:
         raise HTTPException(status_code=404, detail="User not found")
     response_data = {k: v for k, v in data.items() if k not in ('password', '_id')}
-    return {"status": "success", "user": response_data}
+
+    # Populate Redis Cache
+    if role == 'driver':
+        await redis_client.cache_driver(uid, response_data)
+    else:
+        await redis_client.cache_user(uid, response_data)
+
+    return {"status": "success", "user": response_data, "source": "db"}
+
 
 
 @app.post("/auth/student-verify")
@@ -644,6 +688,10 @@ async def create_ride(req: RideCreateRequest):
 
     await db_set("rides", ride_id, ride_data)
 
+    # Upstash Redis: cache active ride state & log user action
+    await redis_client.cache_ride(ride_id, ride_data)
+    await redis_client.log_action("user", req.passengerId, "CREATE_RIDE", {"rideId": ride_id, "category": req.category})
+
     # Broadcast new ride to driver channel
     await manager.broadcast("drivers_available", {
         "event": "new_ride_request",
@@ -677,6 +725,11 @@ async def accept_ride(req: RideAcceptRequest):
     }
 
     await db_update("rides", req.rideId, update_data)
+    merged_ride = {**ride, **update_data}
+
+    # Upstash Redis: update active ride cache & log driver action
+    await redis_client.cache_ride(req.rideId, merged_ride)
+    await redis_client.log_action("driver", req.driverId, "ACCEPT_RIDE", {"rideId": req.rideId})
 
     # Broadcast to passenger ride room
     await manager.broadcast(f"ride_{req.rideId}", {
@@ -715,6 +768,13 @@ async def verify_ride_pin(req: RideVerifyPinRequest):
     }
 
     await db_update("rides", req.rideId, update_data)
+    merged_ride = {**ride, **update_data}
+
+    # Upstash Redis: cache trip start state & log action
+    await redis_client.cache_ride(req.rideId, merged_ride)
+    driver_id = req.driverId or ride.get("driverId", "")
+    if driver_id:
+        await redis_client.log_action("driver", driver_id, "VERIFY_PIN_TRIP_STARTED", {"rideId": req.rideId})
 
     # Broadcast to ride room
     await manager.broadcast(f"ride_{req.rideId}", {
@@ -758,6 +818,14 @@ async def complete_ride(req: RideCompleteRequest):
                 "todayEarnings": round(curr_earnings + driver_earnings, 2)
             })
 
+    # Upstash Redis: clear active ride cache & log audit actions
+    passenger_id = ride.get("passengerId")
+    await redis_client.clear_active_ride(req.rideId, passenger_id, driver_id)
+    if driver_id:
+        await redis_client.log_action("driver", driver_id, "COMPLETE_RIDE", {"rideId": req.rideId, "earnings": driver_earnings})
+    if passenger_id:
+        await redis_client.log_action("user", passenger_id, "TRIP_COMPLETED", {"rideId": req.rideId, "fare": final_fare})
+
     # Broadcast completion to ride room
     await manager.broadcast(f"ride_{req.rideId}", {
         "event": "ride_status_updated",
@@ -790,6 +858,15 @@ async def update_driver_status(req: DriverStatusRequest):
         update_data["speed"] = req.speed
 
     await db_update("drivers", req.driverId, update_data)
+
+    # Upstash Redis: set online status, location & log driver action
+    await redis_client.set_driver_status(req.driverId, req.isOnline, req.latitude, req.longitude)
+    await redis_client.log_action("driver", req.driverId, "STATUS_UPDATE", {
+        "isOnline": req.isOnline,
+        "latitude": req.latitude,
+        "longitude": req.longitude
+    })
+
     return {
         "status": "success",
         "message": f"Driver is now {'online' if req.isOnline else 'offline'}",
@@ -812,6 +889,16 @@ async def cancel_ride(req: RideCancelRequest):
     }
 
     await db_update("rides", req.rideId, update_data)
+
+    # Upstash Redis: clear active ride cache & log cancel action
+    passenger_id = ride.get("passengerId")
+    driver_id = ride.get("driverId")
+    await redis_client.clear_active_ride(req.rideId, passenger_id, driver_id)
+    cancelled_by_id = passenger_id if req.cancelledBy == 'rider' else (driver_id or 'unknown')
+    await redis_client.log_action(req.cancelledBy, cancelled_by_id, "CANCEL_RIDE", {
+        "rideId": req.rideId, "reason": req.reason
+    })
+
 
     # Broadcast cancellation to ride room & drivers pool
     await manager.broadcast(f"ride_{req.rideId}", {
@@ -1018,8 +1105,13 @@ async def update_driver_location(req: LocationUpdateRequest):
         "updatedAt": datetime.now(timezone.utc).isoformat(),
     }
 
-    # Update driver doc
+    # Update driver doc in DB
     await db_update("drivers", req.driverId, location_data)
+
+    # Upstash Redis: Update high-frequency location & GeoSpatial index
+    await redis_client.set_driver_location(
+        req.driverId, req.latitude, req.longitude, req.heading or 0.0, req.speed or 0.0
+    )
 
     # Broadcast to ride room if ride is active
     if req.rideId:
@@ -1034,6 +1126,20 @@ async def update_driver_location(req: LocationUpdateRequest):
 
 @app.get("/driver/location/{driver_id}")
 async def get_driver_location(driver_id: str):
+    # Try Upstash Redis first for real-time location
+    redis_loc = await redis_client.get_driver_location(driver_id)
+    if redis_loc:
+        return {
+            "status": "success",
+            "driverId": driver_id,
+            "latitude": redis_loc.get("latitude"),
+            "longitude": redis_loc.get("longitude"),
+            "heading": redis_loc.get("heading"),
+            "speed": redis_loc.get("speed"),
+            "updatedAt": redis_loc.get("updatedAt"),
+            "source": "upstash_redis",
+        }
+
     driver = await db_get("drivers", driver_id)
     if not driver:
         raise HTTPException(status_code=404, detail="Driver not found")
@@ -1044,7 +1150,9 @@ async def get_driver_location(driver_id: str):
         "longitude": driver.get("longitude"),
         "heading": driver.get("heading"),
         "updatedAt": driver.get("updatedAt"),
+        "source": "db",
     }
+
 
 # ═══════════════════════════════════════════════════════════════════════
 # DRIVER REGISTRATION ENDPOINT
@@ -1178,6 +1286,10 @@ async def websocket_ride(websocket: WebSocket, ride_id: str):
                         "speed": speed,
                         "updatedAt": now_iso,
                     })
+                    # Upstash Redis: Update high-frequency location & GeoSpatial index
+                    await redis_client.set_driver_location(
+                        data["driverId"], lat, lng, heading, speed
+                    )
                 # Broadcast real-time location payload to all connected clients in the ride room
                 await manager.broadcast(room, location_payload)
 
@@ -1257,6 +1369,44 @@ async def websocket_drivers(websocket: WebSocket):
         manager.disconnect(websocket, room)
     except Exception:
         manager.disconnect(websocket, room)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# REDIS MANAGEMENT & MONITORING ENDPOINTS
+# ═══════════════════════════════════════════════════════════════════════
+@app.get("/redis/health")
+async def redis_health():
+    is_ok = await redis_client.ping()
+    return {
+        "status": "success" if is_ok else "error",
+        "redis_configured": redis_client.is_configured,
+        "redis_connected": is_ok,
+        "rest_url": redis_client.url,
+    }
+
+@app.get("/redis/drivers/online")
+async def get_redis_online_drivers():
+    drivers = await redis_client.get_online_drivers()
+    locations = await redis_client.get_online_driver_locations()
+    return {
+        "status": "success",
+        "online_count": len(drivers),
+        "online_driver_ids": drivers,
+        "locations": locations,
+    }
+
+@app.get("/redis/activity/{entity_type}/{entity_id}")
+async def get_redis_activity_logs(entity_type: str, entity_id: str, count: int = 20):
+    logs = await redis_client.get_activity_logs(entity_type, entity_id, count)
+    return {
+        "status": "success",
+        "entityType": entity_type,
+        "entityId": entity_id,
+        "count": len(logs),
+        "activityLogs": logs,
+    }
+
+
 if __name__ == "__main__":
     uvicorn.run(
         "main:app",
@@ -1265,3 +1415,4 @@ if __name__ == "__main__":
         reload=True,
         log_level="info",
     )
+
