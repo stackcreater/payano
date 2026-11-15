@@ -1,5 +1,5 @@
-/// Shared real-time data models for WebSocket / Firebase telemetry
-import 'package:maplibre_gl/maplibre_gl.dart';
+﻿/// Shared real-time data models for WebSocket / Firebase telemetry
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 // ─── DriverTelemetry ─────────────────────────────────────────────────────────
 

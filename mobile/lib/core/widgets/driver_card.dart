@@ -108,16 +108,21 @@ class DriverCard extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        Text(
-                          ride.driverName ?? 'Payano Driver',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+                        Flexible(
+                          child: Text(
+                            ride.driverName ?? 'Payano Driver',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+                            ),
                           ),
                         ),
                         const SizedBox(width: 6),
                         const Icon(Icons.star, color: AppColors.primary, size: 16),
+                        const SizedBox(width: 2),
                         const Text(
                           '4.9',
                           style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),

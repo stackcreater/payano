@@ -28,8 +28,9 @@ dependencies:
 
   # Maps & Location
   google_maps_flutter: ^2.10.0
-  maplibre_gl: ^0.27.1
+  flutter_polyline_points: ^2.1.0
   geolocator: ^13.0.2
+  permission_handler: ^11.3.1
   geocoding: ^3.0.0
   firebase_database: ^11.1.6
 
@@ -39,6 +40,7 @@ dependencies:
   flutter_secure_storage: ^9.2.2
   shared_preferences: ^2.2.2
   web_socket_channel: ^3.0.1
+  local_auth: ^2.3.0
 
   # UI Components & Styling
   google_fonts: ^6.2.1

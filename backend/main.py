@@ -38,10 +38,11 @@ load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '.env'))
 JWT_SECRET = os.getenv('JWT_SECRET', 'payano_jwt_secret_key_2026')
 ADMIN_USERNAME = os.getenv('ADMIN_USERNAME', 'admin')
 ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', 'Admin@5645')
-PORT = int(os.getenv('FASTAPI_PORT', '8000'))
+PORT = int(os.getenv('PORT', os.getenv('FASTAPI_PORT', '5000')))
 GOOGLE_MAPS_API_KEY = os.getenv('GOOGLE_MAPS_API_KEY', '')
 
 gmaps_client = None
+latest_ride_request = None
 if GOOGLE_MAPS_API_KEY and GOOGLE_MAPS_API_KEY != 'YOUR_GOOGLE_MAPS_API_KEY':
     try:
         gmaps_client = googlemaps.Client(key=GOOGLE_MAPS_API_KEY)
@@ -69,16 +70,20 @@ def init_firebase():
         import firebase_admin
         from firebase_admin import credentials, firestore
 
-        service_account_path = os.path.join(
-            os.path.dirname(__file__), '..', 'functions',
-            'payano-49f04-firebase-adminsdk-fbsvc-c3c780bc8f.json'
-        )
+        possible_paths = [
+            os.path.join(os.path.dirname(__file__), 'functions', 'payano-49f04-firebase-adminsdk-fbsvc-c3c780bc8f.json'),
+            os.path.join(os.path.dirname(__file__), '..', 'payano-49f04-firebase-adminsdk-fbsvc-258a9a33a1.json'),
+            os.path.join(os.path.dirname(__file__), 'payano-49f04-firebase-adminsdk-fbsvc-258a9a33a1.json'),
+            os.path.join(os.path.dirname(__file__), 'payano-49f04-firebase-adminsdk-fbsvc-c3c780bc8f.json'),
+            os.path.join(os.path.dirname(__file__), '..', 'functions', 'payano-49f04-firebase-adminsdk-fbsvc-c3c780bc8f.json'),
+        ]
+        service_account_path = next((p for p in possible_paths if os.path.exists(p)), None)
 
         if not firebase_admin._apps:
-            if os.path.exists(service_account_path):
+            if service_account_path:
                 cred = credentials.Certificate(service_account_path)
                 firebase_admin.initialize_app(cred)
-                print("[OK] Firebase initialized with service account")
+                print(f"[OK] Firebase initialized with service account: {service_account_path}")
             else:
                 firebase_admin.initialize_app()
                 print("[WARN] Firebase initialized with default credentials (no service account found)")
@@ -118,7 +123,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -407,23 +412,75 @@ async def root():
 async def health():
     return {"status": "healthy", "firebase": db is not None, "timestamp": datetime.now(timezone.utc).isoformat()}
 
+def get_phone_variants(query: str):
+    if not query:
+        return []
+    raw = str(query).strip()
+    digits = ''.join(c for c in raw if c.isdigit())
+    last10 = digits[-10:] if len(digits) >= 10 else digits
+    variants = {raw}
+    if last10:
+        variants.add(last10)
+        variants.add(f"+91{last10}")
+        variants.add(f"+91 {last10}")
+        variants.add(f"0{last10}")
+    return list(variants)
+
+async def db_find_user(collection: str, identifier: str) -> Optional[dict]:
+    if not identifier:
+        return None
+    # 1. By username
+    user = await db_query_where(collection, 'username', identifier)
+    if user:
+        return user
+    # 2. By phone variants
+    for p in get_phone_variants(identifier):
+        user = await db_query_where(collection, 'phone', p)
+        if user:
+            return user
+    # 3. By email
+    if '@' in identifier:
+        user = await db_query_where(collection, 'email', identifier)
+        if user:
+            return user
+    return None
+
 # ═══════════════════════════════════════════════════════════════════════
 # AUTH ENDPOINTS
 # ═══════════════════════════════════════════════════════════════════════
-@app.post("/auth/signup", status_code=201)
+@app.post("/auth/signup")
 async def signup(req: SignupRequest):
     if not req.username or not req.name or not req.phone or not req.password:
         raise HTTPException(status_code=400, detail="Username, Name, Phone and Password are required.")
 
     collection = get_collection(req.role)
 
-    # Check username uniqueness
-    existing = await db_query_where(collection, 'username', req.username)
+    # Check if user already exists
+    existing = await db_find_user(collection, req.username)
+    if not existing:
+        for p in get_phone_variants(req.phone):
+            existing = await db_query_where(collection, 'phone', p)
+            if existing:
+                break
+    if not existing and req.email:
+        existing = await db_query_where(collection, 'email', req.email)
+
     if existing:
-        raise HTTPException(status_code=400, detail="Username already taken. Please choose another.")
+        stored_pw = existing.get('password', '')
+        if stored_pw and stored_pw == req.password:
+            uid = existing.get('_id', existing.get('uid', existing.get('userId', '')))
+            token = create_token({"uid": uid, "username": existing.get('username', req.username), "phone": existing.get('phone', req.phone), "role": req.role})
+            response_data = {k: v for k, v in existing.items() if k not in ('password', '_id')}
+            if 'uid' not in response_data:
+                response_data['uid'] = uid
+            return {"status": "success", "message": "Account already exists. Logged in successfully!", "token": token, "user": response_data}
+        else:
+            raise HTTPException(status_code=400, detail="An account with this mobile number or email already exists. Please log in with your password.")
 
     uid = uid_generator('usr')
     now = datetime.now(timezone.utc).isoformat()
+    phone_variants = get_phone_variants(req.phone)
+    standard_phone = next((p for p in phone_variants if p.startswith('+91')), req.phone)
 
     if req.role == 'driver':
         user_data = {
@@ -431,7 +488,7 @@ async def signup(req: SignupRequest):
             "userId": uid,
             "username": req.username,
             "name": req.name,
-            "phone": req.phone,
+            "phone": standard_phone,
             "password": req.password,
             "email": req.email,
             "isOnline": True,
@@ -454,7 +511,7 @@ async def signup(req: SignupRequest):
             "uid": uid,
             "username": req.username,
             "name": req.name,
-            "phone": req.phone,
+            "phone": standard_phone,
             "password": req.password,
             "email": req.email,
             "role": "rider",
@@ -463,12 +520,13 @@ async def signup(req: SignupRequest):
             "savedLocations": [],
             "verificationStatus": "verified",
             "studentVerificationStatus": "verified",
+            "profileSetupCompleted": False,
             "createdAt": now,
         }
 
     await db_set(collection, uid, user_data)
 
-    token = create_token({"uid": uid, "username": req.username, "phone": req.phone, "role": req.role})
+    token = create_token({"uid": uid, "username": req.username, "phone": standard_phone, "role": req.role})
 
     # Remove password from response
     response_data = {k: v for k, v in user_data.items() if k != 'password'}
@@ -486,9 +544,9 @@ async def signup(req: SignupRequest):
 
 @app.post("/auth/login")
 async def login(req: LoginRequest):
-    login_query = req.username or req.phone
+    login_query = (req.username or req.phone or "").strip()
     if not login_query:
-        raise HTTPException(status_code=400, detail="Username or Phone is required.")
+        raise HTTPException(status_code=400, detail="Username, Phone, or Email is required.")
 
     # Admin check
     if login_query == ADMIN_USERNAME and req.password == ADMIN_PASSWORD:
@@ -504,11 +562,7 @@ async def login(req: LoginRequest):
         return {"status": "success", "message": "Admin login successful", "token": token, "user": admin_user}
 
     collection = get_collection(req.role)
-
-    # Try username first, fallback to phone
-    user_data = await db_query_where(collection, 'username', login_query)
-    if not user_data:
-        user_data = await db_query_where(collection, 'phone', login_query)
+    user_data = await db_find_user(collection, login_query)
 
     if not user_data:
         role_label = "Driver" if req.role == "driver" else "Passenger"
@@ -666,6 +720,78 @@ async def calculate_fare(req: FareRequest):
     }
 
 # ═══════════════════════════════════════════════════════════════════════
+
+# -----------------------------------------------------------------------------
+# GOOGLE PLACES & GEOCODE PROXY (Avoids Web CORS restrictions)
+# -----------------------------------------------------------------------------
+@app.get("/places/autocomplete")
+async def places_autocomplete(input: str = "", lat: float = 11.6756, lng: float = 78.1470):
+    if not input or not input.strip():
+        return {"status": "success", "predictions": []}
+    
+    api_key = os.getenv("GOOGLE_MAPS_API_KEY", "AIzaSyCP7-I93FnLhfBbgFrkWUIxaQANJnoc_7U")
+    url = f"https://maps.googleapis.com/maps/api/place/autocomplete/json?input={urllib.parse.quote(input)}&location={lat},{lng}&radius=30000&components=country:in&key={api_key}"
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "PayanoBackend/1.0"})
+        with urllib.request.urlopen(req, timeout=5) as response:
+            data = json.loads(response.read().decode())
+            if data.get("status") == "OK" and "predictions" in data:
+                formatted = [
+                    {
+                        "place_id": p.get("place_id", ""),
+                        "description": p.get("description", ""),
+                        "main_text": p.get("structured_formatting", {}).get("main_text", p.get("description", "")),
+                        "secondary_text": p.get("structured_formatting", {}).get("secondary_text", "")
+                    }
+                    for p in data["predictions"]
+                ]
+                return {"status": "success", "predictions": formatted}
+    except Exception as e:
+        print(f"[WARN] Autocomplete failed: {e}")
+    return {"status": "success", "predictions": []}
+
+@app.get("/places/geocode")
+async def places_geocode(lat: float = None, lng: float = None, address: str = None, place_id: str = None):
+    api_key = os.getenv("GOOGLE_MAPS_API_KEY", "AIzaSyCP7-I93FnLhfBbgFrkWUIxaQANJnoc_7U")
+    target_url = None
+    if place_id:
+        target_url = f"https://maps.googleapis.com/maps/api/place/details/json?place_id={place_id}&fields=geometry,formatted_address&key={api_key}"
+    elif lat is not None and lng is not None:
+        target_url = f"https://maps.googleapis.com/maps/api/geocode/json?latlng={lat},{lng}&key={api_key}"
+    elif address:
+        target_url = f"https://maps.googleapis.com/maps/api/geocode/json?address={urllib.parse.quote(address)}&key={api_key}"
+    
+    if target_url:
+        try:
+            req = urllib.request.Request(target_url, headers={"User-Agent": "PayanoBackend/1.0"})
+            with urllib.request.urlopen(req, timeout=5) as response:
+                data = json.loads(response.read().decode())
+                if place_id and "result" in data:
+                    res = data["result"]
+                    loc = res.get("geometry", {}).get("location", {"lat": 11.6756, "lng": 78.1470})
+                    return {"status": "success", "address": res.get("formatted_address", ""), "location": loc}
+                elif "results" in data and len(data["results"]) > 0:
+                    first = data["results"][0]
+                    loc = first.get("geometry", {}).get("location", {"lat": 11.6756, "lng": 78.1470})
+                    return {"status": "success", "address": first.get("formatted_address", ""), "location": loc}
+        except Exception as e:
+            print(f"[WARN] Geocode failed: {e}")
+            
+    return {
+        "status": "success",
+        "address": "Sona College of Technology, Junction Main Road, Salem",
+        "location": {"lat": 11.6756, "lng": 78.1470}
+    }
+
+@app.get("/rides/latest")
+async def get_latest_ride():
+    if latest_ride_request:
+        return {"status": "success", "ride": latest_ride_request}
+    rides = await db_find("rides", "status", "SEARCHING", limit=1)
+    if rides:
+        return {"status": "success", "ride": rides[0]}
+    return {"status": "none", "message": "No active ride requests"}
+
 # RIDE ENDPOINTS
 # ═══════════════════════════════════════════════════════════════════════
 @app.post("/rides/create", status_code=201)
@@ -686,6 +812,8 @@ async def create_ride(req: RideCreateRequest):
         "createdAt": datetime.now(timezone.utc).isoformat(),
     }
 
+    global latest_ride_request
+    latest_ride_request = ride_data
     await db_set("rides", ride_id, ride_data)
 
     # Upstash Redis: cache active ride state & log user action

@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:go_router/go_router.dart';
-import 'package:maplibre_gl/maplibre_gl.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../../../core/services/websocket_location_service.dart';
 import '../../../core/services/map_service.dart';
@@ -30,7 +30,7 @@ class PassengerTrackingScreen extends ConsumerStatefulWidget {
     super.key,
     this.rideId = 'ride_101',
     this.driverId = 'drv_driver_01',
-    this.driverName = 'Ramesh Kumar',
+    this.driverName = 'Payano Driver',
     this.driverPhotoUrl,
     this.vehicleInfo = 'Payano Moto (Hero Splendor+)',
     this.registrationNo = 'KA-01-ET-8821',
@@ -53,12 +53,10 @@ class _PassengerTrackingScreenState extends ConsumerState<PassengerTrackingScree
   final WebSocketLocationService _wsService = WebSocketLocationService();
   late final LocationService _locationService = ref.read(locationServiceProvider);
 
-  // ─── Map ───────────────────────────────────────────────────────────────────
-  MapLibreMapController? _mapController;
-  Symbol? _driverSymbol;
-  Symbol? _passengerSymbol;
-  Symbol? _destinationSymbol;
-  Line? _routeLine;
+  // ─── Map State ─────────────────────────────────────────────────────────────
+  GoogleMapController? _mapController;
+  final Set<Marker> _markers = {};
+  final Set<Polyline> _polylines = {};
 
   // ─── Subscriptions ─────────────────────────────────────────────────────────
   StreamSubscription<RideWebSocketEvent>? _rideEventSub;
@@ -107,12 +105,7 @@ class _PassengerTrackingScreenState extends ConsumerState<PassengerTrackingScree
           setState(() {
             _currentPassengerLocation = newPassengerLoc;
           });
-          if (_passengerSymbol != null && _mapController != null) {
-            _mapController!.updateSymbol(
-              _passengerSymbol!,
-              SymbolOptions(geometry: newPassengerLoc),
-            );
-          }
+          _rebuildMarkers();
           _fetchRoute();
         }
       }
@@ -133,66 +126,71 @@ class _PassengerTrackingScreenState extends ConsumerState<PassengerTrackingScree
 
   // ─── Map Lifecycle ─────────────────────────────────────────────────────────
 
-  void _onMapCreated(MapLibreMapController controller) {
+  void _onMapCreated(GoogleMapController controller) {
     _mapController = controller;
-  }
-
-  void _onStyleLoaded() async {
-    if (_mapController == null) return;
-
-    // 1. Passenger pickup marker (Green)
-    _passengerSymbol = await _mapController!.addSymbol(
-      SymbolOptions(
-        geometry: widget.passengerLocation,
-        iconImage: 'marker-15',
-        iconSize: 2.0,
-        textField: 'Pickup: ${widget.pickupAddress.split(",").first}',
-        textOffset: const Offset(0, 1.8),
-        textColor: '#10B981',
-        textHaloColor: '#FFFFFF',
-        textHaloWidth: 1.5,
-      ),
-    );
-
-    // 2. Dropoff destination marker (Red)
-    _destinationSymbol = await _mapController!.addSymbol(
-      SymbolOptions(
-        geometry: widget.destinationLocation,
-        iconImage: 'marker-15',
-        iconSize: 2.0,
-        textField: 'Drop: ${widget.destinationAddress.split(",").first}',
-        textOffset: const Offset(0, 1.8),
-        textColor: '#EF4444',
-        textHaloColor: '#FFFFFF',
-        textHaloWidth: 1.5,
-      ),
-    );
-
-    // 3. Driver moving marker (Blue)
-    _driverSymbol = await _mapController!.addSymbol(
-      SymbolOptions(
-        geometry: _currentDriverLocation,
-        iconImage: 'airport-15',
-        iconSize: 2.2,
-        iconRotate: _driverHeading,
-        textField: 'Driver ${widget.driverName.split(" ").first}',
-        textOffset: const Offset(0, -1.8),
-        textColor: '#2563EB',
-        textHaloColor: '#FFFFFF',
-        textHaloWidth: 1.5,
-      ),
-    );
-
-    // Initial route calculation
-    await _fetchRoute();
-
-    // Start WebSocket event subscription
+    _rebuildMarkers();
+    _fetchRoute();
     _startRideEventListener();
 
     // Periodic route recalculation every 30s (throttled)
     _routeRecalculateTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       _fetchRoute();
     });
+  }
+
+  void _rebuildMarkers() {
+    final markers = <Marker>{};
+
+    // 1. Passenger pickup marker (Green)
+    final pLoc = _currentPassengerLocation ?? widget.passengerLocation;
+    markers.add(
+      Marker(
+        markerId: const MarkerId('pickup_marker'),
+        position: pLoc,
+        infoWindow: InfoWindow(
+          title: 'Pickup Location',
+          snippet: widget.pickupAddress.split(",").first,
+        ),
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+      ),
+    );
+
+    // 2. Dropoff destination marker (Red)
+    markers.add(
+      Marker(
+        markerId: const MarkerId('destination_marker'),
+        position: widget.destinationLocation,
+        infoWindow: InfoWindow(
+          title: 'Drop-off Destination',
+          snippet: widget.destinationAddress.split(",").first,
+        ),
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+      ),
+    );
+
+    // 3. Driver moving marker (Blue / Azure)
+    if (_currentDriverLocation != null) {
+      markers.add(
+        Marker(
+          markerId: const MarkerId('driver_marker'),
+          position: _currentDriverLocation!,
+          rotation: _driverHeading,
+          infoWindow: InfoWindow(
+            title: 'Driver: ${widget.driverName.split(" ").first}',
+            snippet: widget.vehicleInfo,
+          ),
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+        ),
+      );
+    }
+
+    if (mounted) {
+      setState(() {
+        _markers
+          ..clear()
+          ..addAll(markers);
+      });
+    }
   }
 
   // ─── Route ─────────────────────────────────────────────────────────────────
@@ -223,27 +221,59 @@ class _PassengerTrackingScreenState extends ConsumerState<PassengerTrackingScree
     _drawOrUpdatePolyline(result.points);
   }
 
-  Future<void> _drawOrUpdatePolyline(List<LatLng> points) async {
-    if (_mapController == null || points.isEmpty) return;
+  void _drawOrUpdatePolyline(List<LatLng> points) {
+    if (points.isEmpty) return;
     final isTripStarted = _rideStatus == 'TRIP_STARTED';
-    final lineColor = isTripStarted ? '#10B981' : '#2563EB';
+    final polyColor = isTripStarted ? const Color(0xFF10B981) : const Color(0xFF2563EB);
 
-    if (_routeLine == null) {
-      _routeLine = await _mapController!.addLine(
-        LineOptions(
-          geometry: points,
-          lineColor: lineColor,
-          lineWidth: 5.5,
-          lineOpacity: 0.85,
-          lineJoin: 'round',
-        ),
-      );
-    } else {
-      await _mapController!.updateLine(
-        _routeLine!,
-        LineOptions(geometry: points, lineColor: lineColor),
-      );
+    final polyline = Polyline(
+      polylineId: const PolylineId('ride_active_polyline'),
+      points: points,
+      color: polyColor,
+      width: 5,
+      startCap: Cap.roundCap,
+      endCap: Cap.roundCap,
+    );
+
+    if (mounted) {
+      setState(() {
+        _polylines
+          ..clear()
+          ..add(polyline);
+      });
+      _fitMapBounds();
     }
+  }
+
+  void _fitMapBounds() {
+    if (_mapController == null) return;
+    final points = <LatLng>[];
+    if (_currentDriverLocation != null) points.add(_currentDriverLocation!);
+    if (_currentPassengerLocation != null) points.add(_currentPassengerLocation!);
+    points.add(widget.destinationLocation);
+
+    if (points.length < 2) return;
+
+    double minLat = points.first.latitude;
+    double maxLat = points.first.latitude;
+    double minLng = points.first.longitude;
+    double maxLng = points.first.longitude;
+
+    for (final p in points) {
+      if (p.latitude < minLat) minLat = p.latitude;
+      if (p.latitude > maxLat) maxLat = p.latitude;
+      if (p.longitude < minLng) minLng = p.longitude;
+      if (p.longitude > maxLng) maxLng = p.longitude;
+    }
+
+    final bounds = LatLngBounds(
+      southwest: LatLng(minLat, minLng),
+      northeast: LatLng(maxLat, maxLng),
+    );
+
+    _mapController?.animateCamera(
+      CameraUpdate.newLatLngBounds(bounds, 70),
+    );
   }
 
   // ─── WebSocket Event Listener ─────────────────────────────────────────────
@@ -280,12 +310,7 @@ class _PassengerTrackingScreenState extends ConsumerState<PassengerTrackingScree
       _driverHeading = newHeading;
     });
 
-    if (_driverSymbol != null) {
-      _mapController!.updateSymbol(
-        _driverSymbol!,
-        SymbolOptions(geometry: newLoc, iconRotate: newHeading),
-      );
-    }
+    _rebuildMarkers();
 
     _mapController!.animateCamera(
       CameraUpdate.newCameraPosition(
@@ -304,12 +329,7 @@ class _PassengerTrackingScreenState extends ConsumerState<PassengerTrackingScree
     setState(() => _rideStatus = status);
 
     if (status == 'TRIP_STARTED') {
-      if (_passengerSymbol != null && _mapController != null) {
-        _mapController!.updateSymbol(
-          _passengerSymbol!,
-          const SymbolOptions(textColor: '#6B7280', textField: 'Picked up ✓'),
-        );
-      }
+      _rebuildMarkers();
       _fetchRoute();
     }
 
@@ -350,8 +370,8 @@ class _PassengerTrackingScreenState extends ConsumerState<PassengerTrackingScree
         return 'Please proceed to pickup point';
       case 'TRIP_STARTED':
         return _isLoadingRoute
-            ? 'Heading to destination...'
-            : 'Heading to destination • approx ${_currentRoute.durationMinutes.round()} min (${_currentRoute.distanceKm} km)';
+            ? 'Navigating to destination...'
+            : '${_currentRoute.durationMinutes.round()} mins to drop-off (${_currentRoute.distanceKm} km)';
       default:
         return '';
     }
@@ -359,13 +379,15 @@ class _PassengerTrackingScreenState extends ConsumerState<PassengerTrackingScree
 
   Color get _statusColor {
     switch (_rideStatus) {
+      case 'DRIVER_ARRIVING':
+        return const Color(0xFF2563EB);
       case 'DRIVER_ARRIVED':
-        return Colors.green.shade700;
+        return const Color(0xFFF59E0B);
       case 'TRIP_STARTED':
-        return AppColors.primary;
+        return const Color(0xFF10B981);
       case 'TRIP_COMPLETED':
       case 'COMPLETED':
-        return Colors.purple.shade600;
+        return const Color(0xFF059669);
       default:
         return AppColors.primary;
     }
@@ -378,17 +400,20 @@ class _PassengerTrackingScreenState extends ConsumerState<PassengerTrackingScree
     return Scaffold(
       body: Stack(
         children: [
-          // 1. MapLibre Map
-          MapLibreMap(
+          // 1. GoogleMap
+          GoogleMap(
             initialCameraPosition: CameraPosition(
               target: widget.passengerLocation,
               zoom: 14.5,
             ),
-            styleString: MapService.freeMapStyle,
+            markers: _markers,
+            polylines: _polylines,
             onMapCreated: _onMapCreated,
-            onStyleLoadedCallback: _onStyleLoaded,
-            myLocationEnabled: false,
-            trackCameraPosition: true,
+            myLocationEnabled: true,
+            myLocationButtonEnabled: false,
+            zoomControlsEnabled: false,
+            compassEnabled: true,
+            mapToolbarEnabled: false,
           ),
 
           // 2. Top: Back button + Live Status Pill

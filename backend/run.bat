@@ -1,32 +1,21 @@
 @echo off
-REM Payano FastAPI Backend Startup Script
-REM Usage: run.bat [port]
-
-SET PORT=%1
-IF "%PORT%"=="" SET PORT=8000
-
+REM Payano Backend - Node.js Express Server on port 5000
 echo.
 echo ========================================
-echo  Payano FastAPI Backend
-echo  Starting on http://localhost:%PORT%
+echo   Payano Backend API (Node.js)
+echo   Starting on http://localhost:5000
 echo ========================================
 echo.
 
-cd /d "%~dp0"
+cd /d "%~dp0functions"
 
-REM Check Python is available
-python --version >nul 2>&1
+REM Verify Node.js is installed
+node --version >nul 2>&1
 IF ERRORLEVEL 1 (
-    echo ERROR: Python is not installed or not in PATH
+    echo [ERROR] Node.js is not found in PATH!
     pause
     exit /b 1
 )
 
-REM Install dependencies if needed
-pip install -q -r requirements.txt
-
-REM Start the server
-set PORT=%PORT%
-python main.py
-
+node index.js
 pause

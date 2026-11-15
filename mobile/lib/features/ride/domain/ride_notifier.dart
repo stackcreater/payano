@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../shared/models/ride_model.dart';
 import '../../../shared/models/driver_model.dart';
 import '../../../shared/models/two_wheeler_category.dart';
@@ -70,14 +72,31 @@ class RideNotifier extends StateNotifier<RideState> {
       : super(
           RideState(
             pickup: LocationPoint(
-              address: 'Current Location • MG Road Metro Station, Bengaluru',
-              latitude: 12.9716,
-              longitude: 77.5946,
+              address: 'Current Location (GPS)',
+              latitude: 11.6643,
+              longitude: 78.1460,
+              landmark: 'Live Mobile Location',
             ),
-            destination: null,
+            destination: LocationPoint(
+              address: 'Sona College of Technology, Junction Main Road, Salem',
+              latitude: 11.6756,
+              longitude: 78.1470,
+              landmark: 'Campus Landmark',
+            ),
             selectedCategory: TwoWheelerCategory.categories[1], // Payano Moto default
           ),
         );
+
+  void updateLiveLocation({required double latitude, required double longitude, required String address}) {
+    state = state.copyWith(
+      pickup: LocationPoint(
+        address: address,
+        latitude: latitude,
+        longitude: longitude,
+        landmark: 'Live GPS Location',
+      ),
+    );
+  }
 
   void setPickup(LocationPoint point) {
     state = state.copyWith(pickup: point);
@@ -162,26 +181,48 @@ class RideNotifier extends StateNotifier<RideState> {
 
   void _startDriverMatchingSimulation() {
     _matchingTimer?.cancel();
-    _matchingTimer = Timer(const Duration(seconds: 4), () {
+    _matchingTimer = Timer(const Duration(seconds: 4), () async {
       if (state.currentRide == null || state.currentRide!.status != RideStatus.searching) return;
 
-      final driver = DriverModel(
-        id: 'drv_driver_matched',
-        userId: 'usr_driver_matched',
-        name: 'Ramesh Kumar',
-        phone: '+91 98450 12345',
-        profileImage: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+      // Try to fetch a real online+available driver from Firestore
+      DriverModel? realDriver;
+      try {
+        final snap = await FirebaseFirestore.instance
+            .collection('drivers')
+            .where('isOnline', isEqualTo: true)
+            .where('isAvailable', isEqualTo: true)
+            .limit(5)
+            .get()
+            .timeout(const Duration(seconds: 5));
+
+        if (snap.docs.isNotEmpty) {
+          final doc = snap.docs.first;
+          final data = Map<String, dynamic>.from(doc.data());
+          data['id'] = doc.id;
+          realDriver = DriverModel.fromMap(data);
+          debugPrint('RideNotifier: Matched real driver: ${realDriver.name}');
+        }
+      } catch (e) {
+        debugPrint('RideNotifier: Firestore driver fetch failed: $e');
+      }
+
+      // Fallback generic driver if no real driver is online
+      final driver = realDriver ?? DriverModel(
+        id: 'drv_payano_fallback',
+        userId: 'usr_payano_fallback',
+        name: 'Payano Driver',
+        phone: '+919000000000',
         isOnline: true,
         latitude: state.pickup!.latitude + 0.003,
         longitude: state.pickup!.longitude + 0.002,
         vehicle: VehicleDetails(
           vehicleType: 'Payano Moto',
-          registrationNumber: 'KA-01-EQ-5432',
-          modelName: 'TVS Raider 125',
-          color: 'Electric Yellow',
+          registrationNumber: 'TN 30 AB 0000',
+          modelName: 'Honda Activa',
+          color: 'Blue',
         ),
-        rating: 4.9,
-        totalRides: 890,
+        rating: 4.8,
+        totalRides: 100,
       );
 
       final updatedRide = RideModel(

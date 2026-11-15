@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:maplibre_gl/maplibre_gl.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../services/map_service.dart';
 
 enum MapRouteMode {
@@ -33,12 +33,14 @@ class PayanoMapWidget extends StatefulWidget {
 
 class _PayanoMapWidgetState extends State<PayanoMapWidget> {
   final MapService _mapService = MapService();
-  MapLibreMapController? _controller;
+  GoogleMapController? _controller;
   bool _mapReady = false;
-  Line? _currentLine;
-  final List<Circle> _circles = [];
 
-  // Default Salem, TN geo-coordinates
+  final Set<Marker> _markers = {};
+  final Set<Polyline> _polylines = {};
+  final Set<Circle> _circles = {};
+
+  // Default Salem, TN geo-coordinates (Sona College area)
   static const LatLng _salemCenter = LatLng(11.6643, 78.1460);
   static const LatLng _defaultDriverPos = LatLng(11.6520, 78.1340); // Hasthampatti
   static const LatLng _defaultPickupPos = LatLng(11.6756, 78.1470); // Sona College
@@ -56,123 +58,208 @@ class _PayanoMapWidgetState extends State<PayanoMapWidget> {
         oldWidget.pickupPosition != widget.pickupPosition ||
         oldWidget.dropPosition != widget.dropPosition) {
       if (_mapReady) {
-        _addMarkersAndRoute();
+        _buildMapElements();
       }
     }
   }
 
-  void _onMapCreated(MapLibreMapController controller) {
+  void _onMapCreated(GoogleMapController controller) {
     _controller = controller;
-    setState(() => _mapReady = true);
-    _addMarkersAndRoute();
+    _mapReady = true;
+    _buildMapElements();
   }
 
-  void _onStyleLoaded() {
-    if (_mapReady) _addMarkersAndRoute();
-  }
+  Future<void> _buildMapElements() async {
+    final markers = <Marker>{};
+    final polylines = <Polyline>{};
+    final circles = <Circle>{};
 
-  Future<void> _clearPreviousMapObjects() async {
-    final ctrl = _controller;
-    if (ctrl == null) return;
+    // 1. Driver Position Marker & Pulse Circle
+    markers.add(
+      Marker(
+        markerId: const MarkerId('driver_pos'),
+        position: _driverPos,
+        infoWindow: const InfoWindow(
+          title: 'Driver Location',
+          snippet: 'Payano Moto Pilot',
+        ),
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+      ),
+    );
 
-    if (_currentLine != null) {
-      try {
-        await ctrl.removeLine(_currentLine!);
-      } catch (_) {}
-      _currentLine = null;
-    }
+    circles.add(
+      Circle(
+        circleId: const CircleId('driver_pulse'),
+        center: _driverPos,
+        radius: 80,
+        fillColor: const Color(0xFF2563EB).withAlpha(40),
+        strokeColor: const Color(0xFF2563EB),
+        strokeWidth: 2,
+      ),
+    );
 
-    for (final circle in _circles) {
-      try {
-        await ctrl.removeCircle(circle);
-      } catch (_) {}
-    }
-    _circles.clear();
-  }
-
-  Future<void> _addMarkersAndRoute() async {
-    final ctrl = _controller;
-    if (ctrl == null) return;
-
-    await _clearPreviousMapObjects();
-
-    // 1. Driver position marker (Blue circle)
-    final driverCircle = await ctrl.addCircle(CircleOptions(
-      geometry: _driverPos,
-      circleRadius: 10,
-      circleColor: '#2563EB',
-      circleStrokeWidth: 3,
-      circleStrokeColor: '#FFFFFF',
-    ));
-    _circles.add(driverCircle);
-
+    // 2. Routing logic based on trip mode
     if (widget.routeMode == MapRouteMode.navigatingToPickup ||
         widget.routeMode == MapRouteMode.arrivedAtPickup) {
-      // Calculate real road route: Driver → Pickup
-      debugPrint('[PayanoMapWidget] Routing driver to pickup: $_driverPos -> $_pickupPos');
+      // Driver -> Pickup
+      markers.add(
+        Marker(
+          markerId: const MarkerId('pickup_pos'),
+          position: _pickupPos,
+          infoWindow: const InfoWindow(
+            title: 'Pickup Location',
+            snippet: 'Passenger waiting here',
+          ),
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+        ),
+      );
+
       final route = await _mapService.calculateRoute(
         start: _driverPos,
         destination: _pickupPos,
       );
 
-      _currentLine = await ctrl.addLine(LineOptions(
-        geometry: route.points,
-        lineColor: '#2563EB',
-        lineWidth: 5.5,
-        lineOpacity: 0.85,
-        lineJoin: 'round',
-      ));
-
-      // Pickup marker (Emerald Green circle)
-      final pickupCircle = await ctrl.addCircle(CircleOptions(
-        geometry: _pickupPos,
-        circleRadius: 11,
-        circleColor: '#10B981',
-        circleStrokeWidth: 3,
-        circleStrokeColor: '#FFFFFF',
-      ));
-      _circles.add(pickupCircle);
-
+      if (route.points.isNotEmpty) {
+        polylines.add(
+          Polyline(
+            polylineId: const PolylineId('route_to_pickup'),
+            points: route.points,
+            color: const Color(0xFF2563EB),
+            width: 5,
+            startCap: Cap.roundCap,
+            endCap: Cap.roundCap,
+          ),
+        );
+      }
+      _fitBounds([_driverPos, _pickupPos]);
     } else if (widget.routeMode == MapRouteMode.inTrip) {
-      // Calculate real road route: Driver → Drop-off
-      debugPrint('[PayanoMapWidget] Routing driver to dropoff: $_driverPos -> $_dropPos');
+      // Driver -> Dropoff
+      markers.add(
+        Marker(
+          markerId: const MarkerId('drop_pos'),
+          position: _dropPos,
+          infoWindow: const InfoWindow(
+            title: 'Destination',
+            snippet: 'Drop-off Location',
+          ),
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+        ),
+      );
+
       final route = await _mapService.calculateRoute(
         start: _driverPos,
         destination: _dropPos,
       );
 
-      _currentLine = await ctrl.addLine(LineOptions(
-        geometry: route.points,
-        lineColor: '#10B981',
-        lineWidth: 5.5,
-        lineOpacity: 0.85,
-        lineJoin: 'round',
-      ));
-
-      // Drop marker (Red/Primary circle)
-      final dropCircle = await ctrl.addCircle(CircleOptions(
-        geometry: _dropPos,
-        circleRadius: 11,
-        circleColor: '#EF4444',
-        circleStrokeWidth: 3,
-        circleStrokeColor: '#FFFFFF',
-      ));
-      _circles.add(dropCircle);
+      if (route.points.isNotEmpty) {
+        polylines.add(
+          Polyline(
+            polylineId: const PolylineId('route_in_trip'),
+            points: route.points,
+            color: const Color(0xFF10B981),
+            width: 5,
+            startCap: Cap.roundCap,
+            endCap: Cap.roundCap,
+          ),
+        );
+      }
+      _fitBounds([_driverPos, _dropPos]);
+    } else {
+      // Idle mode - center on driver position
+      _controller?.animateCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(target: _driverPos, zoom: 14.5),
+        ),
+      );
     }
+
+    if (mounted) {
+      setState(() {
+        _markers
+          ..clear()
+          ..addAll(markers);
+        _polylines
+          ..clear()
+          ..addAll(polylines);
+        _circles
+          ..clear()
+          ..addAll(circles);
+      });
+    }
+  }
+
+  void _fitBounds(List<LatLng> points) {
+    if (points.isEmpty || _controller == null) return;
+    if (points.length == 1) {
+      _controller?.animateCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(target: points.first, zoom: 15.0),
+        ),
+      );
+      return;
+    }
+
+    double minLat = points.first.latitude;
+    double maxLat = points.first.latitude;
+    double minLng = points.first.longitude;
+    double maxLng = points.first.longitude;
+
+    for (final p in points) {
+      if (p.latitude < minLat) minLat = p.latitude;
+      if (p.latitude > maxLat) maxLat = p.latitude;
+      if (p.longitude < minLng) minLng = p.longitude;
+      if (p.longitude > maxLng) maxLng = p.longitude;
+    }
+
+    final bounds = LatLngBounds(
+      southwest: LatLng(minLat, minLng),
+      northeast: LatLng(maxLat, maxLng),
+    );
+
+    _controller?.animateCamera(
+      CameraUpdate.newLatLngBounds(bounds, 60),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    return MapLibreMap(
-      initialCameraPosition: CameraPosition(
-        target: widget.driverPosition ?? _salemCenter,
-        zoom: 13.5,
-      ),
-      styleString: MapService.freeMapStyle,
-      myLocationEnabled: false,
-      trackCameraPosition: false,
-      onMapCreated: _onMapCreated,
-      onStyleLoadedCallback: _onStyleLoaded,
+    return Stack(
+      children: [
+        GoogleMap(
+          initialCameraPosition: CameraPosition(
+            target: widget.driverPosition ?? _salemCenter,
+            zoom: 14.5,
+          ),
+          markers: _markers,
+          polylines: _polylines,
+          circles: _circles,
+          myLocationEnabled: true,
+          myLocationButtonEnabled: false,
+          zoomControlsEnabled: false,
+          compassEnabled: true,
+          mapToolbarEnabled: false,
+          onMapCreated: _onMapCreated,
+        ),
+        if (widget.onRecenter != null)
+          Positioned(
+            right: 16,
+            bottom: 16,
+            child: FloatingActionButton.small(
+              heroTag: 'payano_recenter_btn',
+              backgroundColor: widget.isDark ? const Color(0xFF1E293B) : Colors.white,
+              foregroundColor: const Color(0xFF2563EB),
+              onPressed: () {
+                widget.onRecenter!();
+                _controller?.animateCamera(
+                  CameraUpdate.newCameraPosition(
+                    CameraPosition(target: _driverPos, zoom: 15.5),
+                  ),
+                );
+              },
+              child: const Icon(Icons.my_location_rounded, size: 20),
+            ),
+          ),
+      ],
     );
   }
 }

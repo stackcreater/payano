@@ -1,3 +1,5 @@
+import 'package:dio/dio.dart';
+import '../../../../core/config/app_config.dart';
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -342,10 +344,105 @@ class DriverFlowNotifier extends StateNotifier<DriverFlowState> {
       isOnline: true,
       tripState: DriverTripState.onlineSearching,
     );
-    // Simulate auto ride offer after 3.5s for seamless interactive experience
+    _checkForIncomingLiveRide();
+  }
+
+  Future<void> _checkForIncomingLiveRide() async {
+    // 1. Check backend REST API /rides/latest for passenger's live request
+    try {
+      final dio = Dio(BaseOptions(
+        connectTimeout: const Duration(seconds: 3),
+        receiveTimeout: const Duration(seconds: 3),
+      ));
+      final resp = await dio.get('${AppConfig.apiBaseUrl}/rides/latest');
+      if (resp.statusCode == 200 && resp.data is Map && resp.data['status'] == 'success') {
+        final ride = resp.data['ride'];
+        if (ride != null && mounted && state.isOnline && state.tripState == DriverTripState.onlineSearching) {
+          final pickupMap = ride['pickup'] is Map ? ride['pickup'] : {};
+          final destMap = ride['destination'] is Map ? ride['destination'] : {};
+
+          final pickupAddr = (pickupMap['address'] as String?)?.isNotEmpty == true
+              ? pickupMap['address'] as String
+              : 'Sona College Campus Area, Salem';
+          final destAddr = (destMap['address'] as String?)?.isNotEmpty == true
+              ? destMap['address'] as String
+              : 'Sona College of Technology, Junction Main Road, Salem';
+          final riderName = (ride['passengerName'] as String?)?.isNotEmpty == true
+              ? ride['passengerName'] as String
+              : 'Student Rider';
+          final otp = (ride['startOtp'] as String?)?.isNotEmpty == true
+              ? ride['startOtp'] as String
+              : '4582';
+
+          triggerRideOfferWithDetails(
+            riderName: riderName,
+            pickupName: 'Passenger Live GPS',
+            pickupAddress: pickupAddr,
+            dropName: 'Sona College of Technology',
+            dropAddress: destAddr,
+            pickupKm: 0.8,
+            dropKm: 3.5,
+            totalFare: 38.0,
+            driverEarnings: 30.0,
+            pin: otp,
+          );
+          return;
+        }
+      }
+    } catch (_) {}
+
+    // 2. Interactive simulated offer fallback after 3.5s
     Future.delayed(const Duration(milliseconds: 3500), () {
       if (mounted && state.isOnline && state.tripState == DriverTripState.onlineSearching) {
         triggerRideOffer();
+      }
+    });
+  }
+
+  void triggerRideOfferWithDetails({
+    required String riderName,
+    required String pickupName,
+    required String pickupAddress,
+    required String dropName,
+    required String dropAddress,
+    required double pickupKm,
+    required double dropKm,
+    required double totalFare,
+    required double driverEarnings,
+    required String pin,
+  }) {
+    _countdownTimer?.cancel();
+    final updatedRide = DriverActiveRide(
+      id: 'ride_${DateTime.now().millisecondsSinceEpoch}',
+      riderName: riderName,
+      riderPhoto: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400',
+      passengerCount: 1,
+      pickupName: pickupName,
+      pickupAddress: pickupAddress,
+      dropName: dropName,
+      dropAddress: dropAddress,
+      pickupKm: pickupKm,
+      pickupMin: (pickupKm * 3.5).round().clamp(1, 30),
+      dropKm: dropKm,
+      dropMin: (dropKm * 3.0).round().clamp(1, 60),
+      totalFare: totalFare,
+      driverEarnings: driverEarnings,
+      pin: pin,
+      pickupNote: "Passenger live GPS location automatically connected.",
+      speedKmh: 24,
+    );
+
+    state = state.copyWith(
+      activeRide: updatedRide,
+      tripState: DriverTripState.rideOffered,
+      offerTimerSeconds: 15,
+    );
+
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (state.offerTimerSeconds > 1) {
+        state = state.copyWith(offerTimerSeconds: state.offerTimerSeconds - 1);
+      } else {
+        declineRide();
       }
     });
   }

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../core/services/auth_service.dart';
+import '../../../core/services/biometric_service.dart';
 
 class DriverSettingsScreen extends ConsumerStatefulWidget {
   const DriverSettingsScreen({super.key});
@@ -12,16 +14,77 @@ class DriverSettingsScreen extends ConsumerStatefulWidget {
 class _DriverSettingsScreenState extends ConsumerState<DriverSettingsScreen> {
   bool _soundAlerts = true;
   bool _autoAcceptRides = false;
-  bool _biometricLock = true;
+  bool _biometricLock = false;
   bool _locationSharing = true;
   String _selectedMap = 'Google Maps';
   String _maxDistance = '3 km';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBiometricSetting();
+  }
+
+  Future<void> _loadBiometricSetting() async {
+    final enabled = await ref.read(biometricServiceProvider).isBiometricLockEnabled();
+    if (mounted) {
+      setState(() => _biometricLock = enabled);
+    }
+  }
+
+  Future<void> _handleBiometricToggle(bool enable) async {
+    final bioService = ref.read(biometricServiceProvider);
+    final canAuth = await bioService.canAuthenticate();
+
+    if (!canAuth) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Biometric hardware not available or no fingerprint/face enrolled on this device.'),
+            backgroundColor: Color(0xFFEF4444),
+          ),
+        );
+      }
+      setState(() => _biometricLock = false);
+      return;
+    }
+
+    final reason = enable
+        ? 'Scan fingerprint or face to activate Payano biometric lock'
+        : 'Scan fingerprint or face to disable biometric lock';
+
+    final authenticated = await bioService.authenticate(reason: reason);
+    if (authenticated) {
+      await bioService.setBiometricLockEnabled(enable);
+      if (mounted) {
+        setState(() => _biometricLock = enable);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(enable ? '✓ Biometric Lock enabled successfully' : 'Biometric Lock disabled'),
+            backgroundColor: enable ? const Color(0xFF10B981) : const Color(0xFF64748B),
+          ),
+        );
+      }
+    } else {
+      if (mounted) {
+        setState(() => _biometricLock = !enable);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Biometric verification cancelled or failed.'),
+            backgroundColor: Color(0xFFEF4444),
+          ),
+        );
+      }
+    }
+  }
 
   void _showChangePasswordDialog() {
     final currentPassController = TextEditingController();
     final newPassController = TextEditingController();
     final confirmPassController = TextEditingController();
     bool obscure = true;
+    bool isLoading = false;
+    String? errorMessage;
 
     showDialog(
       context: context,
@@ -33,6 +96,19 @@ class _DriverSettingsScreenState extends ConsumerState<DriverSettingsScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                if (errorMessage != null)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEE2E2),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      errorMessage!,
+                      style: const TextStyle(color: Color(0xFFDC2626), fontSize: 12),
+                    ),
+                  ),
                 TextField(
                   controller: currentPassController,
                   obscureText: obscure,
@@ -47,7 +123,7 @@ class _DriverSettingsScreenState extends ConsumerState<DriverSettingsScreen> {
                   controller: newPassController,
                   obscureText: obscure,
                   decoration: const InputDecoration(
-                    labelText: 'New Password',
+                    labelText: 'New Password (min 6 characters)',
                     border: OutlineInputBorder(),
                     contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                   ),
@@ -77,7 +153,7 @@ class _DriverSettingsScreenState extends ConsumerState<DriverSettingsScreen> {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(ctx),
+              onPressed: isLoading ? null : () => Navigator.pop(ctx),
               child: const Text('Cancel'),
             ),
             ElevatedButton(
@@ -86,24 +162,68 @@ class _DriverSettingsScreenState extends ConsumerState<DriverSettingsScreen> {
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               ),
-              onPressed: () {
-                Navigator.pop(ctx);
-                ScaffoldMessenger.of(this.context).showSnackBar(
-                  SnackBar(
-                    content: const Row(
-                      children: [
-                        Icon(Icons.check_circle_outline, color: Colors.white, size: 20),
-                        SizedBox(width: 8),
-                        Text('Password updated successfully!'),
-                      ],
-                    ),
-                    backgroundColor: const Color(0xFF10B981),
-                    behavior: SnackBarBehavior.floating,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
-                );
-              },
-              child: const Text('Update'),
+              onPressed: isLoading
+                  ? null
+                  : () async {
+                      final currentPass = currentPassController.text.trim();
+                      final newPass = newPassController.text.trim();
+                      final confirmPass = confirmPassController.text.trim();
+
+                      if (currentPass.isEmpty) {
+                        setDialogState(() => errorMessage = 'Please enter your current password.');
+                        return;
+                      }
+                      if (newPass.length < 6) {
+                        setDialogState(() => errorMessage = 'New password must be at least 6 characters.');
+                        return;
+                      }
+                      if (newPass != confirmPass) {
+                        setDialogState(() => errorMessage = 'New passwords do not match.');
+                        return;
+                      }
+
+                      setDialogState(() {
+                        isLoading = true;
+                        errorMessage = null;
+                      });
+
+                      try {
+                        await ref.read(authServiceProvider).changePassword(
+                          currentPassword: currentPass,
+                          newPassword: newPass,
+                        );
+
+                        if (context.mounted) {
+                          Navigator.pop(ctx);
+                          ScaffoldMessenger.of(this.context).showSnackBar(
+                            SnackBar(
+                              content: const Row(
+                                children: [
+                                  Icon(Icons.check_circle_outline, color: Colors.white, size: 20),
+                                  SizedBox(width: 8),
+                                  Text('Password updated successfully!'),
+                                ],
+                              ),
+                              backgroundColor: const Color(0xFF10B981),
+                              behavior: SnackBarBehavior.floating,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                          );
+                        }
+                      } catch (e) {
+                        setDialogState(() {
+                          isLoading = false;
+                          errorMessage = e.toString().replaceAll('Exception: ', '');
+                        });
+                      }
+                    },
+              child: isLoading
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Text('Update'),
             ),
           ],
         ),
@@ -175,7 +295,7 @@ class _DriverSettingsScreenState extends ConsumerState<DriverSettingsScreen> {
                   title: 'Biometric / PIN Lock',
                   subtitle: 'Require biometric or PIN to open app',
                   value: _biometricLock,
-                  onChanged: (val) => setState(() => _biometricLock = val),
+                  onChanged: _handleBiometricToggle,
                   isDark: isDark,
                 ),
                 _divider(isDark),

@@ -204,12 +204,6 @@ class ProfileScreen extends ConsumerWidget {
             ),
             _buildProfileTile(
               context,
-              icon: Icons.account_balance_wallet,
-              title: 'Payano Wallet',
-              onTap: () => context.push('/wallet'),
-            ),
-            _buildProfileTile(
-              context,
               icon: Icons.two_wheeler,
               title: 'Switch to Driver Mode',
               onTap: () {

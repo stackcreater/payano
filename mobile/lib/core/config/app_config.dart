@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class AppConfig {
@@ -20,8 +21,42 @@ class AppConfig {
 
   static String get appName => _getEnv('APP_NAME', 'Payano');
   static String get appEnv => _getEnv('APP_ENV', 'development');
-  static String get apiBaseUrl => _getEnv('API_BASE_URL', 'http://localhost:8000');
-  static String get localApiUrl => _getEnv('LOCAL_API_URL', 'http://localhost:8000');
+
+  static String get apiBaseUrl {
+    var raw = _getEnv('API_BASE_URL', 'http://localhost:5000');
+    // Ensure default points to port 5000
+    if (raw.contains(':8000')) {
+      raw = raw.replaceAll(':8000', ':5000');
+    }
+    if (kIsWeb ||
+        defaultTargetPlatform == TargetPlatform.windows ||
+        defaultTargetPlatform == TargetPlatform.macOS ||
+        defaultTargetPlatform == TargetPlatform.linux) {
+      return raw.replaceAll('10.0.2.2', 'localhost');
+    }
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      return raw.replaceAll('localhost', '10.0.2.2').replaceAll('127.0.0.1', '10.0.2.2');
+    }
+    return raw;
+  }
+
+  static String get localApiUrl {
+    var raw = _getEnv('LOCAL_API_URL', 'http://localhost:5000');
+    if (raw.contains(':8000')) {
+      raw = raw.replaceAll(':8000', ':5000');
+    }
+    if (kIsWeb ||
+        defaultTargetPlatform == TargetPlatform.windows ||
+        defaultTargetPlatform == TargetPlatform.macOS ||
+        defaultTargetPlatform == TargetPlatform.linux) {
+      return raw.replaceAll('10.0.2.2', 'localhost');
+    }
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      return raw.replaceAll('localhost', '10.0.2.2').replaceAll('127.0.0.1', '10.0.2.2');
+    }
+    return raw;
+  }
+
   static String get googleMapsApiKey => _getEnv('GOOGLE_MAPS_API_KEY', '');
 
   static String get firebaseApiKey => _getEnv('FIREBASE_API_KEY', '');

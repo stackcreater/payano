@@ -1,5 +1,5 @@
-# Flutter SDK repository (local copy)
-flutter/
+# Flutter SDK repository (local copy) - only top-level
+/flutter/
 .kilo/
 
 # Dependencies and environments
@@ -52,3 +52,5 @@ mobile/android/.gradle/
 local.properties
 **/local.properties
 
+
+**/windows/flutter/ephemeral/

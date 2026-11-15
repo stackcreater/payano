@@ -1,8 +1,8 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
-import 'package:maplibre_gl/maplibre_gl.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:web_socket_channel/io.dart';
 import '../config/app_config.dart';
@@ -47,7 +47,7 @@ class WebSocketLocationService {
     } else if (apiUrl.startsWith('http://')) {
       return apiUrl.replaceFirst('http://', 'ws://');
     }
-    return 'ws://localhost:8000';
+    return 'ws://10.0.2.2:8000';
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -256,6 +256,11 @@ class WebSocketLocationService {
 
   /// Send a ride status change via the ride WebSocket.
   /// [status] should be one of: DRIVER_ARRIVING, DRIVER_ARRIVED, TRIP_STARTED, TRIP_COMPLETED
+  /// Helper to update ride status
+  void updateRideStatus(String rideId, String status) {
+    sendRideStatus(status);
+  }
+
   void sendRideStatus(String status) {
     _sendToRide({'type': 'status', 'status': status});
     debugPrint('WebSocketLocationService: Sent status $status for ride $_activeRideId');

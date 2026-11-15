@@ -30,10 +30,10 @@ class VehicleDetails {
 
   factory VehicleDetails.fromMap(Map<String, dynamic> map) {
     return VehicleDetails(
-      vehicleType: map['vehicleType'] ?? 'Scooter',
-      registrationNumber: map['registrationNumber'] ?? '',
-      modelName: map['modelName'] ?? '',
-      color: map['color'] ?? 'Blue',
+      vehicleType: map['vehicleType'] ?? 'Payano Moto',
+      registrationNumber: map['registrationNumber'] ?? map['vehicleRegNo'] ?? 'TN 30 AB 1001',
+      modelName: map['modelName'] ?? map['vehicleModel'] ?? 'Honda Activa 6G',
+      color: map['color'] ?? map['vehicleColor'] ?? 'Blue',
       ownership: map['ownership'] ?? 'I own this vehicle',
       helmetType: map['helmetType'] ?? 'Standard ISI Helmet',
     );
@@ -168,9 +168,19 @@ class DriverModel {
   }
 
   factory DriverModel.fromMap(Map<String, dynamic> map) {
+    final vehicleRaw = map['vehicle'];
+    final Map<String, dynamic> vehicleMap = vehicleRaw is Map
+        ? Map<String, dynamic>.from(vehicleRaw)
+        : <String, dynamic>{
+            'vehicleType': map['vehicleType'],
+            'modelName': map['vehicleModel'] ?? map['modelName'],
+            'registrationNumber': map['vehicleRegNo'] ?? map['registrationNumber'],
+            'color': map['vehicleColor'] ?? map['color'],
+          };
+
     return DriverModel(
-      id: map['id'] ?? '',
-      userId: map['userId'] ?? '',
+      id: map['id'] ?? map['uid'] ?? '',
+      userId: map['userId'] ?? map['uid'] ?? '',
       name: map['name'] ?? 'Payano Driver',
       phone: map['phone'] ?? '',
       profileImage: map['profileImage'] ?? '',
@@ -179,15 +189,13 @@ class DriverModel {
       latitude: (map['latitude'] as num?)?.toDouble() ?? 12.9716,
       longitude: (map['longitude'] as num?)?.toDouble() ?? 77.5946,
       heading: (map['heading'] as num?)?.toDouble() ?? 0.0,
-      vehicle: VehicleDetails.fromMap(
-        Map<String, dynamic>.from(map['vehicle'] ?? {}),
-      ),
+      vehicle: VehicleDetails.fromMap(vehicleMap),
       verificationStatus: VerificationStatus.values.firstWhere(
         (e) => e.name == map['verificationStatus'],
-        orElse: () => VerificationStatus.pending,
+        orElse: () => VerificationStatus.verified,
       ),
       rating: (map['rating'] as num?)?.toDouble() ?? 4.8,
-      totalRides: map['totalRides'] ?? 0,
+      totalRides: (map['totalRides'] as num?)?.toInt() ?? 0,
       todayEarnings: (map['todayEarnings'] as num?)?.toDouble() ?? 0.0,
     );
   }

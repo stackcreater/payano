@@ -1,4 +1,4 @@
-import 'package:dio/dio.dart';
+﻿import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../config/app_config.dart';
@@ -153,6 +153,13 @@ class RideService {
       debugPrint('RideService: updateRideStatus failed ($e)');
       return false;
     }
+  }
+
+  // ─── Complete Ride ───────────────────────────────────────────────────────
+
+  /// Complete a ride via POST /rides/status
+  Future<bool> completeRide(String rideId, [double? fare]) async {
+    return updateRideStatus(rideId, 'TRIP_COMPLETED');
   }
 
   // ─── Fare Calculation ─────────────────────────────────────────────────────

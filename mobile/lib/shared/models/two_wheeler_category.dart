@@ -34,11 +34,21 @@ class TwoWheelerCategory {
     required this.iconData,
   });
 
-  // Calculate estimated fare formula: base + (dist * rate) + (min * rate) + platformFee
-  double calculateFare({required double distanceKm, required double durationMins, double surgeMultiplier = 1.0}) {
-    double fare = baseFare + (distanceKm * pricePerKm) + (durationMins * pricePerMinute) + platformFee;
+  static const double baseKmLimit = 3.0;
+  static const double baseFareAmount = 25.0;
+  static const double perKmRate = 5.0;
+  static const String perCurrency = '₹5';
+
+  // Calculate estimated fare formula: 3 km is 25 rupees, then each additional km adds ₹5 (PER_CURRENCY = ₹5)
+  double calculateFare({required double distanceKm, double durationMins = 0, double surgeMultiplier = 1.0}) {
+    double fare;
+    if (distanceKm <= baseKmLimit) {
+      fare = baseFareAmount;
+    } else {
+      fare = baseFareAmount + ((distanceKm - baseKmLimit) * perKmRate);
+    }
     fare = fare * surgeMultiplier;
-    return fare < minimumFare ? minimumFare : fare;
+    return fare;
   }
 
   static const List<TwoWheelerCategory> categories = [

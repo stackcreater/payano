@@ -1,5 +1,5 @@
 import 'package:go_router/go_router.dart';
-import 'package:maplibre_gl/maplibre_gl.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../features/auth/presentation/splash_screen.dart';
 import '../features/onboarding/presentation/onboarding_screen.dart';
 import '../features/auth/presentation/login_screen.dart';
@@ -184,7 +184,7 @@ class AppRouter {
           return PassengerTrackingScreen(
             rideId: extra['rideId'] as String? ?? 'ride_101',
             driverId: extra['driverId'] as String? ?? 'drv_driver_01',
-            driverName: extra['driverName'] as String? ?? 'Ramesh Kumar',
+            driverName: extra['driverName'] as String? ?? 'Payano Driver',
             driverPhotoUrl: extra['driverPhotoUrl'] as String?,
             vehicleInfo: extra['vehicleInfo'] as String? ?? 'Payano Moto (Hero Splendor+)',
             registrationNo: extra['registrationNo'] as String? ?? 'KA-01-ET-8821',

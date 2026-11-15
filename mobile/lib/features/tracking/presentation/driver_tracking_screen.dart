@@ -1,9 +1,9 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
-import 'package:maplibre_gl/maplibre_gl.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../../../core/services/websocket_location_service.dart';
 import '../../../core/services/ride_service.dart';
@@ -15,7 +15,7 @@ import '../../../core/widgets/payano_avatar.dart';
 enum RideStage { headingToPickup, arrivedAtPickup, inTrip, completed }
 
 /// Screen for Drivers to navigate to pickup, manage trip stages, and push
-/// real-time location updates to the FastAPI WebSocket backend.
+/// real-time location updates to the backend.
 class DriverTrackingScreen extends ConsumerStatefulWidget {
   final String rideId;
   final String driverId;
@@ -51,12 +51,10 @@ class _DriverTrackingScreenState extends ConsumerState<DriverTrackingScreen> {
   late final RideService _rideService = ref.read(rideServiceProvider);
   late final LocationService _locationService = ref.read(locationServiceProvider);
 
-  // ─── Map ───────────────────────────────────────────────────────────────────
-  MapLibreMapController? _mapController;
-  Symbol? _driverSymbol;
-  Symbol? _passengerSymbol;
-  Symbol? _dropoffSymbol;
-  Line? _routeLine;
+  // ─── Map State ─────────────────────────────────────────────────────────────
+  GoogleMapController? _mapController;
+  final Set<Marker> _markers = {};
+  final Set<Polyline> _polylines = {};
 
   // ─── Timers & Streams ──────────────────────────────────────────────────────
   Timer? _locationPushTimer;
@@ -89,12 +87,7 @@ class _DriverTrackingScreenState extends ConsumerState<DriverTrackingScreen> {
         setState(() {
           _currentDriverLocation = LatLng(lat, lng);
         });
-        if (_driverSymbol != null && _mapController != null) {
-          _mapController!.updateSymbol(
-            _driverSymbol!,
-            SymbolOptions(geometry: _currentDriverLocation),
-          );
-        }
+        _rebuildMarkers();
         _fetchRoute();
       }
     } catch (e) {
@@ -114,60 +107,12 @@ class _DriverTrackingScreenState extends ConsumerState<DriverTrackingScreen> {
 
   // ─── Map Lifecycle ─────────────────────────────────────────────────────────
 
-  void _onMapCreated(MapLibreMapController controller) {
+  void _onMapCreated(GoogleMapController controller) {
     _mapController = controller;
-  }
+    _rebuildMarkers();
+    _fetchRoute();
 
-  void _onStyleLoaded() async {
-    if (_mapController == null) return;
-
-    // 1. Passenger pickup marker (Green)
-    _passengerSymbol = await _mapController!.addSymbol(
-      SymbolOptions(
-        geometry: widget.pickupLocation,
-        iconImage: 'marker-15',
-        iconSize: 2.2,
-        textField: 'Pickup: ${widget.passengerName}',
-        textOffset: const Offset(0, 1.8),
-        textColor: '#10B981',
-        textHaloColor: '#FFFFFF',
-        textHaloWidth: 1.5,
-      ),
-    );
-
-    // 2. Dropoff destination marker (Red / Primary)
-    _dropoffSymbol = await _mapController!.addSymbol(
-      SymbolOptions(
-        geometry: widget.dropoffLocation,
-        iconImage: 'marker-15',
-        iconSize: 2.2,
-        textField: 'Drop: ${widget.dropoffAddress.split(',').first}',
-        textOffset: const Offset(0, 1.8),
-        textColor: '#EF4444',
-        textHaloColor: '#FFFFFF',
-        textHaloWidth: 1.5,
-      ),
-    );
-
-    // 3. Driver live marker (Blue)
-    _driverSymbol = await _mapController!.addSymbol(
-      SymbolOptions(
-        geometry: _currentDriverLocation,
-        iconImage: 'airport-15',
-        iconSize: 2.2,
-        iconRotate: _driverHeading,
-        textField: 'You',
-        textOffset: const Offset(0, -1.8),
-        textColor: '#2563EB',
-        textHaloColor: '#FFFFFF',
-        textHaloWidth: 1.5,
-      ),
-    );
-
-    // Initial route calculation
-    await _fetchRoute();
-
-    // Connect to ride WebSocket room (to receive passenger pings if any)
+    // Connect to ride WebSocket room
     _wsService.streamRideEvents(widget.rideId, driverId: widget.driverId);
 
     // Start pushing GPS location via WebSocket (every 6 seconds)
@@ -179,17 +124,70 @@ class _DriverTrackingScreenState extends ConsumerState<DriverTrackingScreen> {
     });
   }
 
-  // ─── Route ─────────────────────────────────────────────────────────────────
+  void _rebuildMarkers() {
+    final markers = <Marker>{};
+
+    // 1. Passenger pickup marker (Green)
+    markers.add(
+      Marker(
+        markerId: const MarkerId('pickup_marker'),
+        position: widget.pickupLocation,
+        infoWindow: InfoWindow(
+          title: 'Pickup Point',
+          snippet: widget.passengerName,
+        ),
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+      ),
+    );
+
+    // 2. Dropoff destination marker (Red)
+    markers.add(
+      Marker(
+        markerId: const MarkerId('dropoff_marker'),
+        position: widget.dropoffLocation,
+        infoWindow: InfoWindow(
+          title: 'Drop-off Destination',
+          snippet: widget.dropoffAddress.split(',').first,
+        ),
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+      ),
+    );
+
+    // 3. Driver live marker (Blue / Azure)
+    if (_currentDriverLocation != null) {
+      markers.add(
+        Marker(
+          markerId: const MarkerId('driver_marker'),
+          position: _currentDriverLocation!,
+          rotation: _driverHeading,
+          infoWindow: const InfoWindow(
+            title: 'Your Location',
+            snippet: 'Payano Pilot',
+          ),
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+        ),
+      );
+    }
+
+    if (mounted) {
+      setState(() {
+        _markers
+          ..clear()
+          ..addAll(markers);
+      });
+    }
+  }
+
+  // ─── Route Calculation ─────────────────────────────────────────────────────
 
   Future<void> _fetchRoute() async {
     if (_currentDriverLocation == null) return;
 
-    final isHeadingToPickup = _currentStage == RideStage.headingToPickup ||
-        _currentStage == RideStage.arrivedAtPickup;
-    final destination = isHeadingToPickup ? widget.pickupLocation : widget.dropoffLocation;
-    final targetLabel = isHeadingToPickup ? 'Pickup' : 'Drop-off';
+    final destination = _currentStage == RideStage.inTrip
+        ? widget.dropoffLocation
+        : widget.pickupLocation;
 
-    debugPrint('[DriverTracking] Calculating route to $targetLabel: (${destination.latitude}, ${destination.longitude})');
+    debugPrint('[DriverTracking] Fetching route: Driver(${_currentDriverLocation!.latitude}, ${_currentDriverLocation!.longitude}) -> Target(${destination.latitude}, ${destination.longitude})');
 
     final result = await _mapService.calculateRoute(
       start: _currentDriverLocation!,
@@ -203,179 +201,114 @@ class _DriverTrackingScreenState extends ConsumerState<DriverTrackingScreen> {
     _drawOrUpdatePolyline(result.points);
   }
 
-  Future<void> _drawOrUpdatePolyline(List<LatLng> points) async {
-    if (_mapController == null || points.isEmpty) return;
-    final isHeadingToPickup = _currentStage == RideStage.headingToPickup ||
-        _currentStage == RideStage.arrivedAtPickup;
-    final lineColor = isHeadingToPickup ? '#2563EB' : '#10B981';
+  void _drawOrUpdatePolyline(List<LatLng> points) {
+    if (points.isEmpty) return;
+    final isTrip = _currentStage == RideStage.inTrip;
+    final polyColor = isTrip ? const Color(0xFF10B981) : const Color(0xFF2563EB);
 
-    if (_routeLine == null) {
-      _routeLine = await _mapController!.addLine(
-        LineOptions(
-          geometry: points,
-          lineColor: lineColor,
-          lineWidth: 5.5,
-          lineOpacity: 0.85,
-          lineJoin: 'round',
-        ),
-      );
-    } else {
-      await _mapController!.updateLine(
-        _routeLine!,
-        LineOptions(geometry: points, lineColor: lineColor),
-      );
-    }
-  }
-
-  /// Real-time live GPS stream from device + periodic heartbeat push to FastAPI WebSocket
-  void _startLocationPusher() {
-    // 1. Continuous device GPS position listener
-    _positionStreamSub = _locationService.getPositionStream(distanceFilterMeters: 5).listen((pos) {
-      if (!mounted) return;
-      final newLoc = LatLng(pos.latitude, pos.longitude);
-      final newHeading = pos.heading != 0 ? pos.heading : _driverHeading;
-
-      setState(() {
-        _currentDriverLocation = newLoc;
-        _driverHeading = newHeading;
-      });
-
-      if (_driverSymbol != null && _mapController != null) {
-        _mapController!.updateSymbol(
-          _driverSymbol!,
-          SymbolOptions(geometry: newLoc, iconRotate: newHeading),
-        );
-      }
-
-      // Live push updated location to WebSocket
-      _wsService.sendDriverLocation(
-        driverId: widget.driverId,
-        location: newLoc,
-        heading: newHeading,
-        rideId: widget.rideId,
-      );
-    });
-
-    // 2. Periodic fallback push (heartbeat every 6 seconds)
-    _locationPushTimer = Timer.periodic(const Duration(seconds: 6), (_) {
-      if (_currentDriverLocation != null) {
-        _wsService.sendDriverLocation(
-          driverId: widget.driverId,
-          location: _currentDriverLocation!,
-          heading: _driverHeading,
-          rideId: widget.rideId,
-        );
-      }
-    });
-  }
-
-  // ─── Simulation step (demo / testing) ─────────────────────────────────────
-
-  void _simulateStepForward() {
-    if (_currentDriverLocation == null) return;
-    final isHeadingToPickup = _currentStage == RideStage.headingToPickup ||
-        _currentStage == RideStage.arrivedAtPickup;
-    final target = isHeadingToPickup ? widget.pickupLocation : widget.dropoffLocation;
-
-    final newLat = _currentDriverLocation!.latitude +
-        (target.latitude - _currentDriverLocation!.latitude) * 0.25;
-    final newLng = _currentDriverLocation!.longitude +
-        (target.longitude - _currentDriverLocation!.longitude) * 0.25;
-    final newLoc = LatLng(newLat, newLng);
-
-    setState(() => _currentDriverLocation = newLoc);
-
-    if (_driverSymbol != null && _mapController != null) {
-      _mapController!.updateSymbol(_driverSymbol!, SymbolOptions(geometry: newLoc));
-      _mapController!.animateCamera(
-        CameraUpdate.newCameraPosition(CameraPosition(target: newLoc, zoom: 15.5)),
-      );
-    }
-
-    // Force-push updated location via WebSocket
-    _wsService.sendDriverLocation(
-      driverId: widget.driverId,
-      location: newLoc,
-      heading: _driverHeading,
-      forceImmediate: true,
-      rideId: widget.rideId,
+    final polyline = Polyline(
+      polylineId: const PolylineId('driver_active_polyline'),
+      points: points,
+      color: polyColor,
+      width: 5,
+      startCap: Cap.roundCap,
+      endCap: Cap.roundCap,
     );
 
-    _fetchRoute();
+    if (mounted) {
+      setState(() {
+        _polylines
+          ..clear()
+          ..add(polyline);
+      });
+      _fitMapBounds();
+    }
   }
 
-  // ─── Stage Transition ──────────────────────────────────────────────────────
+  void _fitMapBounds() {
+    if (_mapController == null) return;
+    final points = <LatLng>[];
+    if (_currentDriverLocation != null) points.add(_currentDriverLocation!);
+    points.add(_currentStage == RideStage.inTrip ? widget.dropoffLocation : widget.pickupLocation);
+
+    if (points.length < 2) return;
+
+    double minLat = points.first.latitude;
+    double maxLat = points.first.latitude;
+    double minLng = points.first.longitude;
+    double maxLng = points.first.longitude;
+
+    for (final p in points) {
+      if (p.latitude < minLat) minLat = p.latitude;
+      if (p.latitude > maxLat) maxLat = p.latitude;
+      if (p.longitude < minLng) minLng = p.longitude;
+      if (p.longitude > maxLng) maxLng = p.longitude;
+    }
+
+    final bounds = LatLngBounds(
+      southwest: LatLng(minLat, minLng),
+      northeast: LatLng(maxLat, maxLng),
+    );
+
+    _mapController?.animateCamera(
+      CameraUpdate.newLatLngBounds(bounds, 70),
+    );
+  }
+
+  // ─── Real-Time Location Broadcasting ──────────────────────────────────────
+
+  void _startLocationPusher() {
+    _locationPushTimer = Timer.periodic(const Duration(seconds: 6), (_) async {
+      if (_currentDriverLocation == null) return;
+      _wsService.sendDriverLocation(
+        rideId: widget.rideId,
+        driverId: widget.driverId,
+        location: _currentDriverLocation!,
+        heading: _driverHeading,
+        speedKmH: 28.0,
+      );
+    });
+  }
+
+  void _simulateStepForward() {
+    if (_currentRoute.points.isEmpty) return;
+    final points = _currentRoute.points;
+    if (points.length > 1) {
+      final nextPoint = points[1];
+      setState(() {
+        _currentDriverLocation = nextPoint;
+      });
+      _rebuildMarkers();
+      _mapController?.animateCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(target: nextPoint, zoom: 16.0),
+        ),
+      );
+    }
+  }
+
+  // ─── Stage Transitions ────────────────────────────────────────────────────
 
   Future<void> _handleStageTransition() async {
-    if (_isTransitioning) return;
     setState(() => _isTransitioning = true);
-
     try {
-      switch (_currentStage) {
-        case RideStage.headingToPickup:
-          // Notify backend: driver has arrived at pickup
-          _wsService.sendRideStatus('DRIVER_ARRIVED');
-          await _rideService.updateRideStatus(widget.rideId, 'DRIVER_ARRIVED');
-          setState(() => _currentStage = RideStage.arrivedAtPickup);
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('✓ Notified passenger: Driver has arrived!'),
-                backgroundColor: Colors.green,
-              ),
-            );
-          }
-          break;
-
-        case RideStage.arrivedAtPickup:
-          // Notify backend: trip has started
-          _wsService.sendRideStatus('TRIP_STARTED');
-          await _rideService.updateRideStatus(widget.rideId, 'TRIP_STARTED');
-          setState(() => _currentStage = RideStage.inTrip);
-          if (_passengerSymbol != null && _mapController != null) {
-            _mapController!.updateSymbol(
-              _passengerSymbol!,
-              const SymbolOptions(textColor: '#6B7280', textField: 'Picked up ✓'),
-            );
-          }
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('🛵 Trip Started! Navigating to Drop-off.'),
-                backgroundColor: Colors.blue,
-              ),
-            );
-          }
-          // Recalculate route immediately to the dropoff place!
-          await _fetchRoute();
-          break;
-
-        case RideStage.inTrip:
-          // Notify backend: trip completed
-          _wsService.sendRideStatus('TRIP_COMPLETED');
-          await _rideService.updateRideStatus(widget.rideId, 'TRIP_COMPLETED');
-          _locationPushTimer?.cancel(); // Stop pushing location
-          setState(() => _currentStage = RideStage.completed);
-          if (_dropoffSymbol != null && _mapController != null) {
-            _mapController!.updateSymbol(
-              _dropoffSymbol!,
-              const SymbolOptions(textColor: '#10B981', textField: 'Dropped off ✓'),
-            );
-          }
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('✓ Ride Completed Successfully!'),
-                backgroundColor: Colors.purple,
-              ),
-            );
-          }
-          break;
-
-        case RideStage.completed:
-          if (mounted) context.go('/driver/home');
-          break;
+      if (_currentStage == RideStage.headingToPickup) {
+        setState(() => _currentStage = RideStage.arrivedAtPickup);
+        _wsService.sendRideStatus('DRIVER_ARRIVED');
+      } else if (_currentStage == RideStage.arrivedAtPickup) {
+        setState(() => _currentStage = RideStage.inTrip);
+        _wsService.sendRideStatus('TRIP_STARTED');
+        _fetchRoute();
+      } else if (_currentStage == RideStage.inTrip) {
+        setState(() => _currentStage = RideStage.completed);
+        _wsService.sendRideStatus('TRIP_COMPLETED');
+        await _rideService.completeRide(widget.rideId, 45.0);
+        if (mounted) context.go('/driver/home');
+      } else {
+        if (mounted) context.go('/driver/home');
       }
+    } catch (e) {
+      debugPrint('[DriverTracking] Transition error: $e');
     } finally {
       if (mounted) setState(() => _isTransitioning = false);
     }
@@ -388,17 +321,20 @@ class _DriverTrackingScreenState extends ConsumerState<DriverTrackingScreen> {
     return Scaffold(
       body: Stack(
         children: [
-          // 1. MapLibre Map
-          MapLibreMap(
+          // 1. GoogleMap
+          GoogleMap(
             initialCameraPosition: CameraPosition(
               target: widget.initialDriverLocation,
               zoom: 14.8,
             ),
-            styleString: MapService.freeMapStyle,
+            markers: _markers,
+            polylines: _polylines,
             onMapCreated: _onMapCreated,
-            onStyleLoadedCallback: _onStyleLoaded,
-            myLocationEnabled: false,
-            trackCameraPosition: true,
+            myLocationEnabled: true,
+            myLocationButtonEnabled: false,
+            zoomControlsEnabled: false,
+            compassEnabled: true,
+            mapToolbarEnabled: false,
           ),
 
           // 2. Navigation Top Bar
@@ -602,8 +538,8 @@ class _DriverTrackingScreenState extends ConsumerState<DriverTrackingScreen> {
               children: [
                 Icon(
                   _currentStage == RideStage.headingToPickup || _currentStage == RideStage.arrivedAtPickup
-                      ? Icons.my_location
-                      : Icons.location_on,
+                        ? Icons.my_location
+                        : Icons.location_on,
                   color: _currentStage == RideStage.headingToPickup ? Colors.green : AppColors.primary,
                   size: 20,
                 ),

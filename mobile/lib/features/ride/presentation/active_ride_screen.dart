@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:maplibre_gl/maplibre_gl.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../../core/services/map_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/driver_card.dart';
@@ -39,70 +39,42 @@ class ActiveRideScreen extends ConsumerWidget {
     return Scaffold(
       body: Stack(
         children: [
-          // 1. Live Map View (MapLibre GL)
-          Stack(
-            children: [
-              MapLibreMap(
-                initialCameraPosition: const CameraPosition(
-                  target: LatLng(11.6643, 78.1460), // Salem, Tamil Nadu
-                  zoom: 14.0,
-                ),
-                styleString: MapService.freeMapStyle,
-                myLocationEnabled: false,
-                trackCameraPosition: true,
+          // 1. Live Google Map with Real Coordinate Markers
+          GoogleMap(
+            initialCameraPosition: CameraPosition(
+              target: LatLng(currentRide.pickup.latitude, currentRide.pickup.longitude),
+              zoom: 14.5,
+            ),
+            markers: {
+              Marker(
+                markerId: const MarkerId('pickup_marker'),
+                position: LatLng(currentRide.pickup.latitude, currentRide.pickup.longitude),
+                infoWindow: InfoWindow(title: 'Pickup', snippet: currentRide.pickup.address),
+                icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
               ),
-              // Overlays (markers)
-              Stack(children: [
-
-                // Pickup Marker (Green)
-                Positioned(
-                  left: 80,
-                  top: 200,
-                  child: Column(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(color: AppColors.success, borderRadius: BorderRadius.circular(4)),
-                        child: const Text('PICKUP', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
-                      ),
-                      const Icon(Icons.circle, color: AppColors.success, size: 20),
-                    ],
-                  ),
+              Marker(
+                markerId: const MarkerId('dest_marker'),
+                position: LatLng(currentRide.destination.latitude, currentRide.destination.longitude),
+                infoWindow: InfoWindow(title: 'Destination', snippet: currentRide.destination.address),
+                icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+              ),
+              Marker(
+                markerId: const MarkerId('driver_marker'),
+                position: LatLng(
+                  rideState.assignedDriver?.latitude ?? (currentRide.pickup.latitude + 0.0025),
+                  rideState.assignedDriver?.longitude ?? (currentRide.pickup.longitude + 0.0020),
                 ),
-
-                // Driver Location Marker (Live Moving Bike)
-                Positioned(
-                  left: 170,
-                  top: 300,
-                  child: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: const BoxDecoration(
-                      color: AppColors.primary,
-                      shape: BoxShape.circle,
-                      boxShadow: [BoxShadow(color: Colors.black45, blurRadius: 10)],
-                    ),
-                    child: const Icon(Icons.two_wheeler, color: Colors.black, size: 26),
-                  ),
+                infoWindow: InfoWindow(
+                  title: currentRide.driverName ?? 'Payano Driver',
+                  snippet: currentRide.driverVehicle?.modelName ?? 'Payano Moto',
                 ),
-
-                // Destination Marker (Red)
-                Positioned(
-                  right: 80,
-                  bottom: 350,
-                  child: Column(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(color: AppColors.error, borderRadius: BorderRadius.circular(4)),
-                        child: const Text('DESTINATION', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
-                      ),
-                      const Icon(Icons.location_on, color: AppColors.error, size: 28),
-                    ],
-                  ),
-                ),
-              ]),    // inner Stack children
-            ],        // outer Stack children
-          ),          // outer Stack
+                icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
+              ),
+            },
+            zoomControlsEnabled: false,
+            myLocationEnabled: false,
+            myLocationButtonEnabled: false,
+          ),
 
 
           // 2. SOS Emergency Floating Action Button
@@ -130,36 +102,6 @@ class ActiveRideScreen extends ConsumerWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // State Demo Controller Switcher (Driver Arrived -> Trip Started -> Complete)
-                  Container(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: isDark ? AppColors.surfaceDark : Colors.white,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Text('Simulator: ', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                        TextButton(
-                          onPressed: () => rideNotifier.updateRideStatus(RideStatus.driverArrived),
-                          child: const Text('Arrived', style: TextStyle(fontSize: 11)),
-                        ),
-                        TextButton(
-                          onPressed: () => rideNotifier.updateRideStatus(RideStatus.tripStarted),
-                          child: const Text('Start Trip', style: TextStyle(fontSize: 11)),
-                        ),
-                        TextButton(
-                          onPressed: () {
-                            rideNotifier.updateRideStatus(RideStatus.tripCompleted);
-                            context.go('/ride-complete');
-                          },
-                          child: const Text('Complete', style: TextStyle(fontSize: 11, color: AppColors.success)),
-                        ),
-                      ],
-                    ),
-                  ),
 
                   // Live Navigation Tracker Shortcut
                   Container(
