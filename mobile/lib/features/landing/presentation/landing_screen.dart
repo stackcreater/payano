@@ -4,8 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 // ─── Payano Landing Page ───────────────────────────────────────────────────
-// Shown at '/' on desktop web browsers only. Mobile users go through the
-// existing splash → onboarding → login flow unchanged.
+// Fully responsive web landing page. On native mobile apps (Android/iOS APK),
+// it routes straight to '/splash' -> '/onboarding' -> '/login'.
+// On Web (desktop, tablet, or mobile browser), it renders this modern landing.
 // ──────────────────────────────────────────────────────────────────────────
 
 class LandingScreen extends StatefulWidget {
@@ -53,14 +54,175 @@ class _LandingScreenState extends State<LandingScreen>
 
   void _goLogin() => context.go('/login');
 
+  void _showDownloadModal() {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        backgroundColor: Colors.white,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 480),
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: _blue,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Center(
+                          child: Icon(Icons.two_wheeler_rounded, color: Colors.white, size: 24),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: const [
+                          Text(
+                            'Payano Mobile',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                              color: _navy,
+                            ),
+                          ),
+                          Text(
+                            'Fast Two-Wheeler Rides',
+                            style: TextStyle(fontSize: 12, color: _muted),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    icon: const Icon(Icons.close_rounded, color: _muted),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: _skyLight,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: _skyMid),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 50,
+                      height: 50,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: _border),
+                      ),
+                      child: const Center(
+                        child: Icon(Icons.qr_code_2_rounded, size: 36, color: _blue),
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Instant Ride Booking & Tracking',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: _navy),
+                          ),
+                          SizedBox(height: 2),
+                          Text(
+                            '4-Digit Start OTP, live GPS Captain telemetry, and fast UPI checkout.',
+                            style: TextStyle(fontSize: 11, color: _muted),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _blue,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    elevation: 0,
+                  ),
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Downloading Payano Android APK...'),
+                        backgroundColor: _blue,
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.android_rounded, size: 20),
+                  label: const Text(
+                    'Download Android APK',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: _navy,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    side: const BorderSide(color: _border, width: 1.5),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Google Play Store listing coming soon!'),
+                        backgroundColor: _navy,
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.play_arrow_rounded, size: 20, color: Color(0xFF10B981)),
+                  label: const Text(
+                    'Google Play Store',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final w = MediaQuery.of(context).size.width;
-    // Landing page is designed for desktop/web. On mobile, forward to splash.
-    if (!kIsWeb || w < 600) {
+    // If running in a native mobile application container (Android / iOS),
+    // forward directly to the mobile splash / onboarding flow.
+    if (!kIsWeb) {
       WidgetsBinding.instance.addPostFrameCallback((_) => context.go('/splash'));
       return const SizedBox.shrink();
     }
+
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isDesktop = screenWidth >= 960;
+    final hPadding = screenWidth < 600 ? 18.0 : (screenWidth < 1100 ? 32.0 : 48.0);
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -77,6 +239,7 @@ class _LandingScreenState extends State<LandingScreen>
                   pickupCtrl: _pickupCtrl,
                   dropCtrl: _dropCtrl,
                   onBook: _goLogin,
+                  onDownload: _showDownloadModal,
                   blue: _blue,
                   blueDark: _blueDark,
                   skyLight: _skyLight,
@@ -85,9 +248,18 @@ class _LandingScreenState extends State<LandingScreen>
                   navy: _navy,
                   muted: _muted,
                   border: _border,
-                  screenWidth: w,
+                  screenWidth: screenWidth,
+                  isDesktop: isDesktop,
+                  hPadding: hPadding,
                 ),
-                _FleetStrip(blue: _blue, skyLight: _skyLight, navy: _navy, muted: _muted),
+                _FleetStrip(
+                  blue: _blue,
+                  skyLight: _skyLight,
+                  navy: _navy,
+                  muted: _muted,
+                  isDesktop: isDesktop,
+                  hPadding: hPadding,
+                ),
                 _RoleSection(
                   tabIndex: _tabIndex,
                   onTab: (i) => setState(() => _tabIndex = i),
@@ -98,9 +270,24 @@ class _LandingScreenState extends State<LandingScreen>
                   navy: _navy,
                   muted: _muted,
                   border: _border,
+                  isDesktop: isDesktop,
+                  hPadding: hPadding,
                 ),
-                _TrustStrip(blue: _blue, skyLight: _skyLight, navy: _navy, muted: _muted),
-                _Footer(blue: _blue, navy: _navy, muted: _muted, border: _border),
+                _TrustStrip(
+                  blue: _blue,
+                  skyLight: _skyLight,
+                  navy: _navy,
+                  muted: _muted,
+                  isDesktop: isDesktop,
+                  hPadding: hPadding,
+                ),
+                _Footer(
+                  blue: _blue,
+                  navy: _navy,
+                  muted: _muted,
+                  border: _border,
+                  hPadding: hPadding,
+                ),
               ],
             ),
           ),
@@ -113,10 +300,13 @@ class _LandingScreenState extends State<LandingScreen>
             child: _TopNav(
               hasShadow: _navShadow,
               onLogin: _goLogin,
+              onDownload: _showDownloadModal,
               blue: _blue,
               navy: _navy,
               muted: _muted,
               border: _border,
+              screenWidth: screenWidth,
+              hPadding: hPadding,
             ),
           ),
         ],
@@ -131,19 +321,27 @@ class _LandingScreenState extends State<LandingScreen>
 class _TopNav extends StatelessWidget {
   final bool hasShadow;
   final VoidCallback onLogin;
+  final VoidCallback onDownload;
   final Color blue, navy, muted, border;
+  final double screenWidth;
+  final double hPadding;
 
   const _TopNav({
     required this.hasShadow,
     required this.onLogin,
+    required this.onDownload,
     required this.blue,
     required this.navy,
     required this.muted,
     required this.border,
+    required this.screenWidth,
+    required this.hPadding,
   });
 
   @override
   Widget build(BuildContext context) {
+    final showLinks = screenWidth >= 880;
+
     return AnimatedContainer(
       duration: const Duration(milliseconds: 180),
       height: 68,
@@ -155,7 +353,7 @@ class _TopNav extends StatelessWidget {
         border: Border(bottom: BorderSide(color: hasShadow ? border : Colors.transparent, width: 1)),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 48),
+        padding: EdgeInsets.symmetric(horizontal: hPadding),
         child: Row(
           children: [
             // ── Logo ──────────────────────────────────────────────────────
@@ -188,36 +386,67 @@ class _TopNav extends StatelessWidget {
 
             const Spacer(),
 
-            // ── Nav Links ──────────────────────────────────────────────────
-            ...[
-              'Availability',
-              'Safety',
-              'Drive with Us',
-              'Pricing',
-            ].map(
-              (label) => Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 18),
-                child: MouseRegion(
-                  cursor: SystemMouseCursors.click,
-                  child: Text(
-                    label,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      color: muted,
+            // ── Nav Links (shown on desktop only) ──────────────────────────
+            if (showLinks) ...[
+              ...[
+                'Availability',
+                'Safety',
+                'Drive with Us',
+                'Pricing',
+              ].map(
+                (label) => Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: muted,
+                      ),
                     ),
                   ),
                 ),
               ),
+              const SizedBox(width: 16),
+            ],
+
+            // ── Download App Button ───────────────────────────────────────
+            GestureDetector(
+              onTap: onDownload,
+              child: Container(
+                padding: EdgeInsets.symmetric(horizontal: screenWidth < 500 ? 12 : 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEFF6FF),
+                  borderRadius: BorderRadius.circular(32),
+                  border: Border.all(color: blue.withOpacity(0.35), width: 1.2),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.download_rounded, color: blue, size: 16),
+                    const SizedBox(width: 6),
+                    Text(
+                      screenWidth < 500 ? 'Download' : 'Download Now',
+                      style: TextStyle(
+                        color: blue,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
 
-            const SizedBox(width: 24),
+            const SizedBox(width: 10),
 
-            // ── CTA Button ─────────────────────────────────────────────────
+            // ── Login / Register CTA Button ────────────────────────────────
             GestureDetector(
               onTap: onLogin,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 10),
+                padding: EdgeInsets.symmetric(horizontal: screenWidth < 500 ? 14 : 20, vertical: 9),
                 decoration: BoxDecoration(
                   color: blue,
                   borderRadius: BorderRadius.circular(32),
@@ -225,11 +454,11 @@ class _TopNav extends StatelessWidget {
                     BoxShadow(color: blue.withOpacity(0.30), blurRadius: 12, offset: const Offset(0, 4)),
                   ],
                 ),
-                child: const Text(
-                  'Login / Register',
-                  style: TextStyle(
+                child: Text(
+                  screenWidth < 500 ? 'Login' : 'Login / Register',
+                  style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 14,
+                    fontSize: 13,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -248,13 +477,17 @@ class _TopNav extends StatelessWidget {
 class _HeroSection extends StatelessWidget {
   final TextEditingController pickupCtrl, dropCtrl;
   final VoidCallback onBook;
+  final VoidCallback onDownload;
   final Color blue, blueDark, skyLight, skyMid, skyAccent, navy, muted, border;
   final double screenWidth;
+  final bool isDesktop;
+  final double hPadding;
 
   const _HeroSection({
     required this.pickupCtrl,
     required this.dropCtrl,
     required this.onBook,
+    required this.onDownload,
     required this.blue,
     required this.blueDark,
     required this.skyLight,
@@ -264,156 +497,214 @@ class _HeroSection extends StatelessWidget {
     required this.muted,
     required this.border,
     required this.screenWidth,
+    required this.isDesktop,
+    required this.hPadding,
   });
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 600,
+    return Container(
+      constraints: BoxConstraints(minHeight: isDesktop ? 620 : 0),
       child: Stack(
         children: [
-          // ── Diagonal sky-blue geometric ribbon (right column background) ──
+          // ── Diagonal sky-blue geometric ribbon ──
           Positioned.fill(
             child: CustomPaint(painter: _DiagonalRibbonPainter(skyLight: skyLight, skyMid: skyMid, skyAccent: skyAccent)),
           ),
 
-          // ── Content row ──────────────────────────────────────────────────
+          // ── Content container ─────────────────────────────────────────────
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 48),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                // ── Left Column (55%) ──────────────────────────────────────
-                Expanded(
-                  flex: 55,
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Status pill
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-                        decoration: BoxDecoration(
-                          color: blue.withOpacity(0.10),
-                          borderRadius: BorderRadius.circular(32),
-                          border: Border.all(color: blue.withOpacity(0.25)),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.bolt_rounded, color: blue, size: 16),
-                            const SizedBox(width: 6),
-                            Text(
-                              'Live Campus & City Fleet',
-                              style: TextStyle(
-                                color: blue,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 13,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 24),
+            padding: EdgeInsets.symmetric(horizontal: hPadding, vertical: isDesktop ? 40 : 28),
+            child: isDesktop ? _buildDesktopRow() : _buildMobileColumn(),
+          ),
+        ],
+      ),
+    );
+  }
 
-                      // Headline
-                      Text(
-                        'Move Smarter\non Two Wheels.',
-                        style: TextStyle(
-                          fontSize: screenWidth > 1200 ? 60 : 48,
-                          fontWeight: FontWeight.w900,
-                          color: navy,
-                          height: 1.08,
-                          letterSpacing: -1.5,
-                        ),
-                      ),
-                      const SizedBox(height: 20),
+  Widget _buildDesktopRow() {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        // Left Column (55%)
+        Expanded(
+          flex: 55,
+          child: _buildHeroTextContent(),
+        ),
 
-                      // Subheadline
-                      Text(
-                        "India's distinctive two-wheeler ride-hailing and bike-taxi\nplatform. Quick, secure, and affordable.",
-                        style: TextStyle(
-                          fontSize: 17,
-                          color: muted,
-                          height: 1.65,
-                          fontWeight: FontWeight.w400,
-                        ),
-                      ),
-                      const SizedBox(height: 40),
+        const SizedBox(width: 36),
 
-                      // ── Glassmorphic Booking Dock ────────────────────────
-                      _BookingDock(
-                        pickupCtrl: pickupCtrl,
-                        dropCtrl: dropCtrl,
-                        onBook: onBook,
-                        blue: blue,
-                        blueDark: blueDark,
-                        border: border,
-                      ),
-                    ],
-                  ),
+        // Right Column (45%) — 3D Centerpiece
+        Expanded(
+          flex: 45,
+          child: _buildHero3DVisual(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMobileColumn() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildHeroTextContent(),
+        const SizedBox(height: 36),
+        Center(child: _buildHero3DVisual()),
+      ],
+    );
+  }
+
+  Widget _buildHeroTextContent() {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Status pill
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+          decoration: BoxDecoration(
+            color: blue.withOpacity(0.10),
+            borderRadius: BorderRadius.circular(32),
+            border: Border.all(color: blue.withOpacity(0.25)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.bolt_rounded, color: blue, size: 16),
+              const SizedBox(width: 6),
+              Text(
+                'Live Campus & City Fleet',
+                style: TextStyle(
+                  color: blue,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
                 ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
 
-                const SizedBox(width: 32),
+        // Headline
+        Text(
+          'Move Smarter\non Two Wheels.',
+          style: TextStyle(
+            fontSize: screenWidth > 1200 ? 56 : (screenWidth > 600 ? 44 : 36),
+            fontWeight: FontWeight.w900,
+            color: navy,
+            height: 1.10,
+            letterSpacing: -1.2,
+          ),
+        ),
+        const SizedBox(height: 16),
 
-                // ── Right Column (45%) — Visual ────────────────────────────
-                Expanded(
-                  flex: 45,
-                  child: SizedBox(
-                    height: 540,
-                    child: Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        // Scooter illustration
-                        Positioned.fill(
-                          child: Center(
-                            child: _ScooterIllustration(blue: blue, skyMid: skyMid),
-                          ),
-                        ),
+        // Subheadline
+        Text(
+          "India's distinctive two-wheeler ride-hailing and bike-taxi platform. Quick, secure, and affordable for students and urban riders.",
+          style: TextStyle(
+            fontSize: screenWidth < 600 ? 15 : 16.5,
+            color: muted,
+            height: 1.6,
+            fontWeight: FontWeight.w400,
+          ),
+        ),
+        const SizedBox(height: 32),
 
-                        // Pill 1 — 4-Digit OTP (top-left)
-                        Positioned(
-                          top: 90,
-                          left: -20,
-                          child: _FeaturePill(
-                            icon: Icons.lock_rounded,
-                            label: '4-Digit Start OTP',
-                            value: '4  8  2  9',
-                            dark: true,
-                            blue: blue,
-                          ),
-                        ),
+        // Glassmorphic Booking Dock
+        _BookingDock(
+          pickupCtrl: pickupCtrl,
+          dropCtrl: dropCtrl,
+          onBook: onBook,
+          blue: blue,
+          blueDark: blueDark,
+          border: border,
+          screenWidth: screenWidth,
+        ),
+      ],
+    );
+  }
 
-                        // Pill 2 — Captains Nearby (bottom-right)
-                        Positioned(
-                          bottom: 110,
-                          right: 0,
-                          child: _FeaturePill(
-                            icon: Icons.two_wheeler_rounded,
-                            label: 'Captains Nearby',
-                            value: '12 Active',
-                            dark: false,
-                            blue: blue,
-                          ),
-                        ),
+  Widget _buildHero3DVisual() {
+    final double imgSize = isDesktop ? (screenWidth > 1200 ? 440 : 380) : math.min(screenWidth * 0.85, 360);
 
-                        // Pill 3 — Razorpay (bottom-center)
-                        Positioned(
-                          bottom: 55,
-                          left: 20,
-                          child: _FeaturePill(
-                            icon: Icons.payment_rounded,
-                            label: 'Razorpay Ready',
-                            value: 'UPI · Wallet · Card',
-                            dark: false,
-                            blue: blue,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+    return SizedBox(
+      height: imgSize + 60,
+      width: imgSize + 60,
+      child: Stack(
+        alignment: Alignment.center,
+        clipBehavior: Clip.none,
+        children: [
+          // ── The Rich 3D Artwork (User Uploaded Image) ────────────────────
+          Container(
+            width: imgSize,
+            height: imgSize,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: blue.withOpacity(0.20),
+                  blurRadius: 36,
+                  offset: const Offset(0, 16),
+                ),
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.08),
+                  blurRadius: 18,
+                  offset: const Offset(0, 6),
                 ),
               ],
+            ),
+            child: ClipOval(
+              child: Image.asset(
+                'assets/images/payano_hero_3d.jpg',
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  return Container(
+                    color: skyMid,
+                    child: Center(
+                      child: Icon(Icons.two_wheeler_rounded, size: 80, color: blue),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+
+          // ── Pill 1: 4-Digit Start OTP (Top-Left) ─────────────────────────
+          Positioned(
+            top: 20,
+            left: isDesktop ? -15 : 0,
+            child: _FeaturePill(
+              icon: Icons.lock_rounded,
+              label: '4-Digit Start OTP',
+              value: '4  8  2  9',
+              dark: true,
+              blue: blue,
+            ),
+          ),
+
+          // ── Pill 2: 12 Captains Nearby (Bottom-Right) ─────────────────────
+          Positioned(
+            bottom: 25,
+            right: isDesktop ? -10 : 0,
+            child: _FeaturePill(
+              icon: Icons.two_wheeler_rounded,
+              label: 'Captains Nearby',
+              value: '12 Active',
+              dark: false,
+              blue: blue,
+            ),
+          ),
+
+          // ── Pill 3: Razorpay Ready (Bottom-Left) ──────────────────────────
+          Positioned(
+            bottom: 5,
+            left: isDesktop ? 15 : 10,
+            child: _FeaturePill(
+              icon: Icons.payment_rounded,
+              label: 'Razorpay Ready',
+              value: 'Instant UPI',
+              dark: false,
+              blue: blue,
             ),
           ),
         ],
@@ -427,6 +718,7 @@ class _BookingDock extends StatelessWidget {
   final TextEditingController pickupCtrl, dropCtrl;
   final VoidCallback onBook;
   final Color blue, blueDark, border;
+  final double screenWidth;
 
   const _BookingDock({
     required this.pickupCtrl,
@@ -435,10 +727,13 @@ class _BookingDock extends StatelessWidget {
     required this.blue,
     required this.blueDark,
     required this.border,
+    required this.screenWidth,
   });
 
   @override
   Widget build(BuildContext context) {
+    final isCompact = screenWidth < 520;
+
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -449,88 +744,133 @@ class _BookingDock extends StatelessWidget {
           BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 12, offset: const Offset(0, 2)),
         ],
       ),
-      child: IntrinsicHeight(
-        child: Row(
-          children: [
-            // ── Inputs ──────────────────────────────────────────────────
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  children: [
-                    _LocationInput(
-                      controller: pickupCtrl,
-                      hint: 'Enter Pickup Location',
-                      icon: Icons.my_location_rounded,
-                      iconColor: const Color(0xFF10B981),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      child: Row(
-                        children: [
-                          const SizedBox(width: 18),
-                          Expanded(child: Container(height: 1, color: const Color(0xFFE2E8F0))),
-                          const SizedBox(width: 10),
-                          Container(
-                            width: 24,
-                            height: 24,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF1F5F9),
-                              shape: BoxShape.circle,
-                              border: Border.all(color: border),
-                            ),
-                            child: const Icon(Icons.swap_vert_rounded, size: 14, color: Color(0xFF64748B)),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(child: Container(height: 1, color: const Color(0xFFE2E8F0))),
-                          const SizedBox(width: 18),
-                        ],
-                      ),
-                    ),
-                    _LocationInput(
-                      controller: dropCtrl,
-                      hint: 'Enter Drop Location',
-                      icon: Icons.location_on_rounded,
-                      iconColor: const Color(0xFF2563EB),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+      child: isCompact ? _buildCompactVertical() : _buildStandardHorizontal(),
+    );
+  }
 
-            // ── Book Ride CTA ───────────────────────────────────────────
-            GestureDetector(
-              onTap: onBook,
-              child: Container(
-                width: 120,
-                decoration: BoxDecoration(
-                  color: blue,
-                  borderRadius: const BorderRadius.only(
-                    topRight: Radius.circular(18),
-                    bottomRight: Radius.circular(18),
+  Widget _buildStandardHorizontal() {
+    return IntrinsicHeight(
+      child: Row(
+        children: [
+          // Inputs
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(18),
+              child: Column(
+                children: [
+                  _LocationInput(
+                    controller: pickupCtrl,
+                    hint: 'Enter Pickup Location',
+                    icon: Icons.my_location_rounded,
+                    iconColor: const Color(0xFF10B981),
                   ),
-                ),
-                child: const Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.two_wheeler_rounded, color: Colors.white, size: 32),
-                    SizedBox(height: 10),
-                    Text(
-                      'Book\nRide',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                        height: 1.2,
-                      ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Row(
+                      children: [
+                        const SizedBox(width: 18),
+                        Expanded(child: Container(height: 1, color: const Color(0xFFE2E8F0))),
+                        const SizedBox(width: 10),
+                        Container(
+                          width: 22,
+                          height: 22,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF1F5F9),
+                            shape: BoxShape.circle,
+                            border: Border.all(color: border),
+                          ),
+                          child: const Icon(Icons.swap_vert_rounded, size: 13, color: Color(0xFF64748B)),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(child: Container(height: 1, color: const Color(0xFFE2E8F0))),
+                        const SizedBox(width: 18),
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+                  _LocationInput(
+                    controller: dropCtrl,
+                    hint: 'Enter Drop Location',
+                    icon: Icons.location_on_rounded,
+                    iconColor: const Color(0xFF2563EB),
+                  ),
+                ],
               ),
             ),
-          ],
-        ),
+          ),
+
+          // Book Ride CTA Button
+          GestureDetector(
+            onTap: onBook,
+            child: Container(
+              width: 124,
+              decoration: BoxDecoration(
+                color: blue,
+                borderRadius: const BorderRadius.only(
+                  topRight: Radius.circular(18),
+                  bottomRight: Radius.circular(18),
+                ),
+              ),
+              child: const Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.two_wheeler_rounded, color: Colors.white, size: 30),
+                  SizedBox(height: 8),
+                  Text(
+                    'Book\nRide',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      height: 1.2,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCompactVertical() {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          _LocationInput(
+            controller: pickupCtrl,
+            hint: 'Enter Pickup Location',
+            icon: Icons.my_location_rounded,
+            iconColor: const Color(0xFF10B981),
+          ),
+          const SizedBox(height: 10),
+          const Divider(height: 1, color: Color(0xFFE2E8F0)),
+          const SizedBox(height: 10),
+          _LocationInput(
+            controller: dropCtrl,
+            hint: 'Enter Drop Location',
+            icon: Icons.location_on_rounded,
+            iconColor: const Color(0xFF2563EB),
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: blue,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                elevation: 0,
+              ),
+              onPressed: onBook,
+              icon: const Icon(Icons.two_wheeler_rounded, size: 20),
+              label: const Text('Book Ride Now', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -554,13 +894,13 @@ class _LocationInput extends StatelessWidget {
     return Row(
       children: [
         Container(
-          width: 36,
-          height: 36,
+          width: 34,
+          height: 34,
           decoration: BoxDecoration(
             color: iconColor.withOpacity(0.10),
             shape: BoxShape.circle,
           ),
-          child: Icon(icon, color: iconColor, size: 18),
+          child: Icon(icon, color: iconColor, size: 17),
         ),
         const SizedBox(width: 12),
         Expanded(
@@ -569,7 +909,7 @@ class _LocationInput extends StatelessWidget {
             style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Color(0xFF0F172A)),
             decoration: InputDecoration(
               hintText: hint,
-              hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 14),
+              hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 13.5),
               border: InputBorder.none,
               isDense: true,
               contentPadding: EdgeInsets.zero,
@@ -581,126 +921,7 @@ class _LocationInput extends StatelessWidget {
   }
 }
 
-// ── Scooter SVG Illustration ────────────────────────────────────────────────
-class _ScooterIllustration extends StatelessWidget {
-  final Color blue, skyMid;
-  const _ScooterIllustration({required this.blue, required this.skyMid});
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 360,
-      height: 320,
-      child: CustomPaint(painter: _ScooterPainter(blue: blue, skyMid: skyMid)),
-    );
-  }
-}
-
-class _ScooterPainter extends CustomPainter {
-  final Color blue, skyMid;
-  const _ScooterPainter({required this.blue, required this.skyMid});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final w = size.width;
-    final h = size.height;
-
-    final bodyPaint = Paint()..color = blue;
-    final whitePaint = Paint()..color = Colors.white;
-    final lightBlue = Paint()..color = skyMid;
-    final darkPaint = Paint()..color = const Color(0xFF1E293B);
-    final accentPaint = Paint()..color = const Color(0xFF93C5FD);
-    final shadowPaint = Paint()
-      ..color = blue.withOpacity(0.18)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 18);
-
-    // Shadow
-    canvas.drawOval(Rect.fromCenter(center: Offset(w * 0.48, h * 0.88), width: w * 0.72, height: h * 0.08), shadowPaint);
-
-    // Rear wheel
-    canvas.drawCircle(Offset(w * 0.22, h * 0.76), 48, darkPaint);
-    canvas.drawCircle(Offset(w * 0.22, h * 0.76), 36, lightBlue);
-    canvas.drawCircle(Offset(w * 0.22, h * 0.76), 14, darkPaint);
-
-    // Front wheel
-    canvas.drawCircle(Offset(w * 0.76, h * 0.76), 44, darkPaint);
-    canvas.drawCircle(Offset(w * 0.76, h * 0.76), 32, lightBlue);
-    canvas.drawCircle(Offset(w * 0.76, h * 0.76), 12, darkPaint);
-
-    // Body frame
-    final bodyPath = Path()
-      ..moveTo(w * 0.25, h * 0.70)
-      ..lineTo(w * 0.20, h * 0.52)
-      ..lineTo(w * 0.36, h * 0.42)
-      ..lineTo(w * 0.62, h * 0.38)
-      ..lineTo(w * 0.74, h * 0.52)
-      ..lineTo(w * 0.74, h * 0.70)
-      ..close();
-    canvas.drawPath(bodyPath, bodyPaint);
-
-    // Seat
-    final seatPath = Path()
-      ..moveTo(w * 0.36, h * 0.42)
-      ..lineTo(w * 0.56, h * 0.36)
-      ..lineTo(w * 0.60, h * 0.40)
-      ..lineTo(w * 0.40, h * 0.46)
-      ..close();
-    canvas.drawPath(seatPath, whitePaint);
-
-    // Handlebar area (front)
-    final handlePath = Path()
-      ..moveTo(w * 0.62, h * 0.38)
-      ..lineTo(w * 0.68, h * 0.28)
-      ..lineTo(w * 0.74, h * 0.30)
-      ..lineTo(w * 0.74, h * 0.52)
-      ..close();
-    canvas.drawPath(handlePath, accentPaint);
-
-    // Windscreen
-    final windPath = Path()
-      ..moveTo(w * 0.56, h * 0.36)
-      ..lineTo(w * 0.62, h * 0.26)
-      ..lineTo(w * 0.70, h * 0.28)
-      ..lineTo(w * 0.68, h * 0.34)
-      ..close();
-    canvas.drawPath(windPath, whitePaint..color = Colors.white.withOpacity(0.80));
-
-    // Headlight
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(Rect.fromCenter(center: Offset(w * 0.72, h * 0.46), width: 20, height: 14), const Radius.circular(4)),
-      whitePaint..color = Colors.white,
-    );
-
-    // Brand text on body
-    final tp = TextPainter(
-      text: TextSpan(
-        text: 'payano',
-        style: TextStyle(color: Colors.white.withOpacity(0.80), fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1.2),
-      ),
-      textDirection: TextDirection.ltr,
-    )..layout();
-    tp.paint(canvas, Offset(w * 0.36, h * 0.56));
-
-    // Kickstand
-    final kickPath = Path()
-      ..moveTo(w * 0.42, h * 0.70)
-      ..lineTo(w * 0.44, h * 0.78)
-      ..lineTo(w * 0.48, h * 0.78)
-      ..lineTo(w * 0.46, h * 0.70);
-    canvas.drawPath(kickPath, darkPaint);
-
-    // Exhaust pipe
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(Rect.fromLTWH(w * 0.22, h * 0.68, w * 0.06, 6), const Radius.circular(3)),
-      accentPaint,
-    );
-  }
-
-  @override
-  bool shouldRepaint(_ScooterPainter old) => false;
-}
-
-// ── Feature Pills floating around scooter ───────────────────────────────────
+// ── Feature Pills floating around the 3D graphic ───────────────────────────
 class _FeaturePill extends StatelessWidget {
   final IconData icon;
   final String label, value;
@@ -722,10 +943,11 @@ class _FeaturePill extends StatelessWidget {
     final secondary = dark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: dark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
         boxShadow: [
           BoxShadow(color: Colors.black.withOpacity(dark ? 0.25 : 0.10), blurRadius: 16, offset: const Offset(0, 4)),
         ],
@@ -734,22 +956,21 @@ class _FeaturePill extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 34,
-            height: 34,
+            width: 30,
+            height: 30,
             decoration: BoxDecoration(
               color: dark ? blue.withOpacity(0.20) : blue.withOpacity(0.10),
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(8),
             ),
-            child: Icon(icon, color: blue, size: 18),
+            child: Icon(icon, color: blue, size: 16),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 8),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(label, style: TextStyle(fontSize: 11, color: secondary, fontWeight: FontWeight.w500)),
-              const SizedBox(height: 2),
-              Text(value, style: TextStyle(fontSize: 14, color: primary, fontWeight: FontWeight.w700)),
+              Text(label, style: TextStyle(fontSize: 10, color: secondary, fontWeight: FontWeight.w500)),
+              Text(value, style: TextStyle(fontSize: 12.5, color: primary, fontWeight: FontWeight.w700)),
             ],
           ),
         ],
@@ -787,11 +1008,21 @@ class _DiagonalRibbonPainter extends CustomPainter {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// FLEET AVAILABILITY STRIP
+// FLEET AVAILABILITY STRIP (Responsive)
 // ════════════════════════════════════════════════════════════════════════════
 class _FleetStrip extends StatelessWidget {
   final Color blue, skyLight, navy, muted;
-  const _FleetStrip({required this.blue, required this.skyLight, required this.navy, required this.muted});
+  final bool isDesktop;
+  final double hPadding;
+
+  const _FleetStrip({
+    required this.blue,
+    required this.skyLight,
+    required this.navy,
+    required this.muted,
+    required this.isDesktop,
+    required this.hPadding,
+  });
 
   static const _zones = [
     {
@@ -821,7 +1052,7 @@ class _FleetStrip extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       color: const Color(0xFFF8FAFC),
-      padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 56),
+      padding: EdgeInsets.symmetric(horizontal: hPadding, vertical: 56),
       child: Column(
         children: [
           _SectionLabel(label: 'Live Fleet Availability', blue: blue),
@@ -829,18 +1060,29 @@ class _FleetStrip extends StatelessWidget {
           Text(
             'Real-time captain coverage across Salem and campus zones',
             style: TextStyle(fontSize: 16, color: muted, height: 1.5),
+            textAlign: TextAlign.center,
           ),
           const SizedBox(height: 40),
-          Row(
-            children: _zones.map((z) {
-              return Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
+          if (isDesktop)
+            Row(
+              children: _zones.map((z) {
+                return Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    child: _ZoneCard(zone: z, blue: blue, skyLight: skyLight, navy: navy, muted: muted),
+                  ),
+                );
+              }).toList(),
+            )
+          else
+            Column(
+              children: _zones.map((z) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
                   child: _ZoneCard(zone: z, blue: blue, skyLight: skyLight, navy: navy, muted: muted),
-                ),
-              );
-            }).toList(),
-          ),
+                );
+              }).toList(),
+            ),
         ],
       ),
     );
@@ -855,7 +1097,7 @@ class _ZoneCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(28),
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
@@ -869,8 +1111,8 @@ class _ZoneCard extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Container(
-                width: 48,
-                height: 48,
+                width: 46,
+                height: 46,
                 decoration: BoxDecoration(color: skyLight, borderRadius: BorderRadius.circular(14)),
                 child: Icon(zone['icon'] as IconData, color: blue, size: 24),
               ),
@@ -891,10 +1133,10 @@ class _ZoneCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 20),
-          Text(zone['title'] as String, style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: navy)),
+          const SizedBox(height: 18),
+          Text(zone['title'] as String, style: TextStyle(fontSize: 16.5, fontWeight: FontWeight.w700, color: navy)),
           const SizedBox(height: 8),
-          Text(zone['captains'] as String, style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: blue)),
+          Text(zone['captains'] as String, style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: blue)),
           const SizedBox(height: 4),
           Text(zone['pickup'] as String, style: TextStyle(fontSize: 13, color: muted)),
         ],
@@ -904,13 +1146,15 @@ class _ZoneCard extends StatelessWidget {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// ROLE SECTION — Passenger / Captain Tabs
+// ROLE SECTION (Responsive Tabbed Passenger & Captain Flows)
 // ════════════════════════════════════════════════════════════════════════════
 class _RoleSection extends StatelessWidget {
   final int tabIndex;
   final ValueChanged<int> onTab;
   final VoidCallback onCTA;
   final Color blue, blueDark, skyLight, navy, muted, border;
+  final bool isDesktop;
+  final double hPadding;
 
   const _RoleSection({
     required this.tabIndex,
@@ -922,6 +1166,8 @@ class _RoleSection extends StatelessWidget {
     required this.navy,
     required this.muted,
     required this.border,
+    required this.isDesktop,
+    required this.hPadding,
   });
 
   static const _passengerSteps = [
@@ -943,7 +1189,7 @@ class _RoleSection extends StatelessWidget {
 
     return Container(
       color: Colors.white,
-      padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 72),
+      padding: EdgeInsets.symmetric(horizontal: hPadding, vertical: 64),
       child: Column(
         children: [
           _SectionLabel(label: tabIndex == 0 ? 'Ride as a Passenger' : 'Earn as a Captain', blue: blue),
@@ -955,9 +1201,9 @@ class _RoleSection extends StatelessWidget {
             style: TextStyle(fontSize: 16, color: muted, height: 1.5),
             textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 32),
+          const SizedBox(height: 28),
 
-          // ── Tab switcher ─────────────────────────────────────────────────
+          // Tab Switcher
           Container(
             decoration: BoxDecoration(
               color: const Color(0xFFF1F5F9),
@@ -972,39 +1218,49 @@ class _RoleSection extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 56),
-
-          // ── 3 steps ───────────────────────────────────────────────────────
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: steps.asMap().entries.map((e) {
-              final i = e.key;
-              final s = e.value;
-              return Expanded(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(child: _StepCard(step: s, blue: blue, navy: navy, muted: muted, skyLight: skyLight)),
-                    if (i < steps.length - 1) ...[
-                      const SizedBox(width: 8),
-                      Padding(
-                        padding: const EdgeInsets.only(top: 32),
-                        child: Icon(Icons.arrow_forward_rounded, color: const Color(0xFFCBD5E1), size: 24),
-                      ),
-                      const SizedBox(width: 8),
-                    ],
-                  ],
-                ),
-              );
-            }).toList(),
-          ),
           const SizedBox(height: 48),
 
-          // ── CTA ───────────────────────────────────────────────────────────
+          // 3 Steps
+          if (isDesktop)
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: steps.asMap().entries.map((e) {
+                final i = e.key;
+                final s = e.value;
+                return Expanded(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: _StepCard(step: s, blue: blue, navy: navy, muted: muted, skyLight: skyLight)),
+                      if (i < steps.length - 1) ...[
+                        const SizedBox(width: 8),
+                        const Padding(
+                          padding: EdgeInsets.only(top: 32),
+                          child: Icon(Icons.arrow_forward_rounded, color: Color(0xFFCBD5E1), size: 24),
+                        ),
+                        const SizedBox(width: 8),
+                      ],
+                    ],
+                  ),
+                );
+              }).toList(),
+            )
+          else
+            Column(
+              children: steps.map((s) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: _StepCard(step: s, blue: blue, navy: navy, muted: muted, skyLight: skyLight),
+                );
+              }).toList(),
+            ),
+          const SizedBox(height: 40),
+
+          // CTA Button
           GestureDetector(
             onTap: onCTA,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 36, vertical: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 15),
               decoration: BoxDecoration(
                 color: blue,
                 borderRadius: BorderRadius.circular(14),
@@ -1012,7 +1268,7 @@ class _RoleSection extends StatelessWidget {
               ),
               child: Text(
                 ctaLabel,
-                style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700),
+                style: const TextStyle(color: Colors.white, fontSize: 15.5, fontWeight: FontWeight.w700),
               ),
             ),
           ),
@@ -1035,7 +1291,7 @@ class _TabBtn extends StatelessWidget {
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 11),
         decoration: BoxDecoration(
           color: active ? Colors.white : Colors.transparent,
           borderRadius: BorderRadius.circular(10),
@@ -1048,7 +1304,7 @@ class _TabBtn extends StatelessWidget {
           style: TextStyle(
             color: active ? blue : const Color(0xFF64748B),
             fontWeight: active ? FontWeight.w700 : FontWeight.w500,
-            fontSize: 14,
+            fontSize: 13.5,
           ),
         ),
       ),
@@ -1064,7 +1320,7 @@ class _StepCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(28),
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: const Color(0xFFF8FAFC),
         borderRadius: BorderRadius.circular(20),
@@ -1074,8 +1330,8 @@ class _StepCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            width: 44,
-            height: 44,
+            width: 42,
+            height: 42,
             decoration: BoxDecoration(color: blue.withOpacity(0.10), borderRadius: BorderRadius.circular(12)),
             child: Center(
               child: Text(
@@ -1084,10 +1340,10 @@ class _StepCard extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 16),
           Text(step['title']!, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: navy)),
-          const SizedBox(height: 10),
-          Text(step['desc']!, style: TextStyle(fontSize: 13.5, color: muted, height: 1.65)),
+          const SizedBox(height: 8),
+          Text(step['desc']!, style: TextStyle(fontSize: 13, color: muted, height: 1.6)),
         ],
       ),
     );
@@ -1095,11 +1351,21 @@ class _StepCard extends StatelessWidget {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// TRUST & TECH STRIP
+// TRUST & TECH STRIP (Responsive)
 // ════════════════════════════════════════════════════════════════════════════
 class _TrustStrip extends StatelessWidget {
   final Color blue, skyLight, navy, muted;
-  const _TrustStrip({required this.blue, required this.skyLight, required this.navy, required this.muted});
+  final bool isDesktop;
+  final double hPadding;
+
+  const _TrustStrip({
+    required this.blue,
+    required this.skyLight,
+    required this.navy,
+    required this.muted,
+    required this.isDesktop,
+    required this.hPadding,
+  });
 
   static const _trust = [
     {'icon': Icons.lock_rounded, 'title': '4-Digit Start OTP', 'desc': 'Cryptographic ride authorization before every trip starts.'},
@@ -1112,72 +1378,102 @@ class _TrustStrip extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       color: const Color(0xFF0F172A),
-      padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 64),
+      padding: EdgeInsets.symmetric(horizontal: hPadding, vertical: 60),
       child: Column(
         children: [
-          Text(
+          const Text(
             'Built for Trust. Engineered for Speed.',
-            style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w800, color: Colors.white, letterSpacing: -0.5),
+            style: TextStyle(fontSize: 30, fontWeight: FontWeight.w800, color: Colors.white, letterSpacing: -0.5),
             textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 48),
-          Row(
-            children: _trust.map((t) {
-              return Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Column(
-                    children: [
-                      Container(
-                        width: 60,
-                        height: 60,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF1E293B),
-                          borderRadius: BorderRadius.circular(18),
-                          border: Border.all(color: const Color(0xFF2563EB).withOpacity(0.40), width: 1.5),
-                        ),
-                        child: Icon(t['icon'] as IconData, color: const Color(0xFF60A5FA), size: 28),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(t['title'] as String, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700)),
-                      const SizedBox(height: 8),
-                      Text(
-                        t['desc'] as String,
-                        style: const TextStyle(color: Color(0xFF64748B), fontSize: 13, height: 1.6),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
+          const SizedBox(height: 44),
+          if (isDesktop)
+            Row(
+              children: _trust.map((t) {
+                return Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    child: _buildTrustItem(t),
                   ),
-                ),
-              );
-            }).toList(),
-          ),
+                );
+              }).toList(),
+            )
+          else
+            Wrap(
+              spacing: 20,
+              runSpacing: 24,
+              children: _trust.map((t) {
+                return SizedBox(
+                  width: (MediaQuery.of(context).size.width - (hPadding * 2) - 20) / 2 > 160
+                      ? (MediaQuery.of(context).size.width - (hPadding * 2) - 20) / 2
+                      : double.infinity,
+                  child: _buildTrustItem(t),
+                );
+              }).toList(),
+            ),
         ],
       ),
+    );
+  }
+
+  Widget _buildTrustItem(Map<String, dynamic> t) {
+    return Column(
+      children: [
+        Container(
+          width: 56,
+          height: 56,
+          decoration: BoxDecoration(
+            color: const Color(0xFF1E293B),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFF2563EB).withOpacity(0.40), width: 1.5),
+          ),
+          child: Icon(t['icon'] as IconData, color: const Color(0xFF60A5FA), size: 26),
+        ),
+        const SizedBox(height: 14),
+        Text(t['title'] as String, style: const TextStyle(color: Colors.white, fontSize: 14.5, fontWeight: FontWeight.w700)),
+        const SizedBox(height: 6),
+        Text(
+          t['desc'] as String,
+          style: const TextStyle(color: Color(0xFF64748B), fontSize: 12.5, height: 1.55),
+          textAlign: TextAlign.center,
+        ),
+      ],
     );
   }
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// FOOTER
+// FOOTER (Responsive)
 // ════════════════════════════════════════════════════════════════════════════
 class _Footer extends StatelessWidget {
   final Color blue, navy, muted, border;
-  const _Footer({required this.blue, required this.navy, required this.muted, required this.border});
+  final double hPadding;
+
+  const _Footer({
+    required this.blue,
+    required this.navy,
+    required this.muted,
+    required this.border,
+    required this.hPadding,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Container(
       color: Colors.white,
-      padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 36),
+      padding: EdgeInsets.symmetric(horizontal: hPadding, vertical: 32),
       child: Column(
         children: [
           Divider(color: border, height: 1),
-          const SizedBox(height: 28),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          const SizedBox(height: 24),
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 20,
+            runSpacing: 16,
             children: [
               Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Container(
                     width: 30,
@@ -1187,16 +1483,16 @@ class _Footer extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                   Text('PAYANO', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: blue, letterSpacing: 2)),
-                  const SizedBox(width: 16),
+                  const SizedBox(width: 14),
                   Text('© 2026 Payano Mobility Pvt. Ltd.', style: TextStyle(fontSize: 12, color: muted)),
                 ],
               ),
               Wrap(
-                spacing: 24,
+                spacing: 20,
                 children: ['Terms of Use', 'Privacy Policy', 'API Docs', 'Download App'].map((l) {
                   return GestureDetector(
                     onTap: () {},
-                    child: Text(l, style: TextStyle(fontSize: 13, color: muted, decoration: TextDecoration.underline)),
+                    child: Text(l, style: TextStyle(fontSize: 12.5, color: muted, decoration: TextDecoration.underline)),
                   );
                 }).toList(),
               ),
@@ -1227,4 +1523,3 @@ class _SectionLabel extends StatelessWidget {
     );
   }
 }
-

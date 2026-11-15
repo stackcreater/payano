@@ -45,3 +45,4 @@ class DesktopAuthWrapper extends StatelessWidget {
     );
   }
 }
+
