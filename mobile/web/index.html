@@ -328,20 +328,38 @@ h78.747C231.693,100.736,232.77,106.162,232.77,111.694z"
   <div id="recaptcha-container"></div>
 
   <script>
-    // Remove loader on Flutter first-frame event (fired by Flutter engine)
     function removeLoader() {
       var loader = document.getElementById('loading-indicator');
       if (!loader) return;
       loader.style.opacity = '0';
+      loader.style.pointerEvents = 'none';
       setTimeout(function () {
-        if (loader && loader.parentNode) loader.parentNode.removeChild(loader);
-      }, 500);
+        if (loader && loader.parentNode) {
+          loader.parentNode.removeChild(loader);
+        }
+      }, 400);
     }
-    window.addEventListener('flutter-first-frame', removeLoader);
-    // Safety fallback: hide loader after 10s max regardless
-    window.addEventListener('load', function () {
-      setTimeout(removeLoader, 10000);
-    });
+
+    // Fast polling: check if Flutter view or glass-pane is mounted into the DOM
+    var pollCount = 0;
+    var pollInterval = setInterval(function () {
+      pollCount++;
+      var isMounted = document.querySelector('flutter-view') || 
+                      document.querySelector('flt-glass-pane') ||
+                      document.querySelector('flt-scene-host');
+      if (isMounted || pollCount >= 20) { // Max 2.0 seconds
+        clearInterval(pollInterval);
+        removeLoader();
+      }
+    }, 100);
+
+    // Hard fallback: remove after 2.0s max
+    setTimeout(function () {
+      clearInterval(pollInterval);
+      removeLoader();
+    }, 2000);
+
+    window.removePayanoLoader = removeLoader;
   </script>
 
   <script src="flutter_bootstrap.js" async></script>

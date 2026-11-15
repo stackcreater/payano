@@ -24,6 +24,22 @@ class _LandingScreenState extends State<LandingScreen>
   int _tabIndex = 0; // 0 = Passenger, 1 = Captain
   bool _navShadow = false;
 
+  final _offersKey = GlobalKey();
+  final _fleetKey = GlobalKey();
+  final _rolesKey = GlobalKey();
+  final _trustKey = GlobalKey();
+
+  void _scrollTo(GlobalKey key) {
+    final ctx = key.currentContext;
+    if (ctx != null) {
+      Scrollable.ensureVisible(
+        ctx,
+        duration: const Duration(milliseconds: 600),
+        curve: Curves.easeInOutCubic,
+      );
+    }
+  }
+
   // ── Brand Colors ────────────────────────────────────────────────────────
   static const _navy = Color(0xFF0F172A);
   static const _slate = Color(0xFF1E293B);
@@ -253,6 +269,7 @@ class _LandingScreenState extends State<LandingScreen>
                   hPadding: hPadding,
                 ),
                 _WhatWeOfferSection(
+                  key: _offersKey,
                   navy: _navy,
                   muted: _muted,
                   blue: _blue,
@@ -260,6 +277,7 @@ class _LandingScreenState extends State<LandingScreen>
                   hPadding: hPadding,
                 ),
                 _FleetStrip(
+                  key: _fleetKey,
                   blue: _blue,
                   skyLight: _skyLight,
                   navy: _navy,
@@ -268,6 +286,7 @@ class _LandingScreenState extends State<LandingScreen>
                   hPadding: hPadding,
                 ),
                 _RoleSection(
+                  key: _rolesKey,
                   tabIndex: _tabIndex,
                   onTab: (i) => setState(() => _tabIndex = i),
                   onCTA: _goLogin,
@@ -281,6 +300,7 @@ class _LandingScreenState extends State<LandingScreen>
                   hPadding: hPadding,
                 ),
                 _TrustStrip(
+                  key: _trustKey,
                   blue: _blue,
                   skyLight: _skyLight,
                   navy: _navy,
@@ -308,6 +328,13 @@ class _LandingScreenState extends State<LandingScreen>
               hasShadow: _navShadow,
               onLogin: _goLogin,
               onDownload: _showDownloadModal,
+              onPricing: () => _scrollTo(_offersKey),
+              onAvailability: () => _scrollTo(_fleetKey),
+              onSafety: () => _scrollTo(_trustKey),
+              onDriveWithUs: () {
+                setState(() => _tabIndex = 1);
+                _scrollTo(_rolesKey);
+              },
               blue: _blue,
               navy: _navy,
               muted: _muted,
@@ -329,6 +356,10 @@ class _TopNav extends StatelessWidget {
   final bool hasShadow;
   final VoidCallback onLogin;
   final VoidCallback onDownload;
+  final VoidCallback onPricing;
+  final VoidCallback onAvailability;
+  final VoidCallback onSafety;
+  final VoidCallback onDriveWithUs;
   final Color blue, navy, muted, border;
   final double screenWidth;
   final double hPadding;
@@ -337,6 +368,10 @@ class _TopNav extends StatelessWidget {
     required this.hasShadow,
     required this.onLogin,
     required this.onDownload,
+    required this.onPricing,
+    required this.onAvailability,
+    required this.onSafety,
+    required this.onDriveWithUs,
     required this.blue,
     required this.navy,
     required this.muted,
@@ -395,27 +430,10 @@ class _TopNav extends StatelessWidget {
 
             // ── Nav Links (shown on desktop only) ──────────────────────────
             if (showLinks) ...[
-              ...[
-                'Availability',
-                'Safety',
-                'Drive with Us',
-                'Pricing',
-              ].map(
-                (label) => Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 14),
-                  child: MouseRegion(
-                    cursor: SystemMouseCursors.click,
-                    child: Text(
-                      label,
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        color: muted,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
+              _buildNavLink('What We Offer', onPricing),
+              _buildNavLink('Availability', onAvailability),
+              _buildNavLink('Safety', onSafety),
+              _buildNavLink('Drive with Us', onDriveWithUs),
               const SizedBox(width: 16),
             ],
 
@@ -472,6 +490,27 @@ class _TopNav extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNavLink(String label, VoidCallback onTap) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: muted,
+            ),
+          ),
         ),
       ),
     );
@@ -1034,9 +1073,8 @@ class _WhatWeOfferSection extends StatelessWidget {
     {
       'title': 'Quick Pickup',
       'desc':
-          'Pickups within minutes that help you save time on every ride. A Payano is always nearby when you need to get moving.',
-      'imageUrl':
-          'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=700&q=80',
+          'Pickups within minutes that help you save time on every ride. A Payano captain is always nearby when you need to get moving.',
+      'assetPath': 'assets/images/payano_hero_3d.jpg',
       'icon': Icons.flash_on_rounded,
       'badge': 'Under 3 Mins',
     },
@@ -1044,8 +1082,7 @@ class _WhatWeOfferSection extends StatelessWidget {
       'title': 'Best Fares',
       'desc':
           'Affordable prices designed for everyday student and city rides. 3 km for ₹25 flat and ₹5/km thereafter—travel more, spend less without compromising on comfort.',
-      'imageUrl':
-          'https://images.unsplash.com/photo-1526367790999-0150786686a2?auto=format&fit=crop&w=700&q=80',
+      'assetPath': 'assets/images/payano_splash_logo.png',
       'icon': Icons.currency_rupee_rounded,
       'badge': '₹25 Flat Base',
     },
@@ -1053,8 +1090,7 @@ class _WhatWeOfferSection extends StatelessWidget {
       'title': 'Never Too Far',
       'desc':
           'Present across Salem campuses, transit hubs, and city express routes. Wherever you go, find a Payano ride close by.',
-      'imageUrl':
-          'https://images.unsplash.com/photo-1568772585407-9361f9bf3a87?auto=format&fit=crop&w=700&q=80',
+      'assetPath': 'assets/images/student_verification.jpg',
       'icon': Icons.map_rounded,
       'badge': 'Campus & City',
     },
@@ -1156,30 +1192,11 @@ class _OfferCard extends StatelessWidget {
             children: [
               ClipRRect(
                 borderRadius: BorderRadius.circular(22),
-                child: Image.network(
-                  offer['imageUrl'] as String,
+                child: Image.asset(
+                  offer['assetPath'] as String,
                   width: double.infinity,
                   height: 220,
                   fit: BoxFit.cover,
-                  loadingBuilder: (ctx, child, progress) {
-                    if (progress == null) return child;
-                    return Container(
-                      color: const Color(0xFFF1F5F9),
-                      child: Center(
-                        child: SizedBox(
-                          width: 28,
-                          height: 28,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.5,
-                            color: blue,
-                            value: progress.expectedTotalBytes != null
-                                ? progress.cumulativeBytesLoaded / progress.expectedTotalBytes!
-                                : null,
-                          ),
-                        ),
-                      ),
-                    );
-                  },
                   errorBuilder: (ctx, err, stack) {
                     return Container(
                       decoration: const BoxDecoration(
