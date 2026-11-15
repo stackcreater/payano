@@ -1062,6 +1062,7 @@ class _WhatWeOfferSection extends StatelessWidget {
   final double hPadding;
 
   const _WhatWeOfferSection({
+    super.key,
     required this.navy,
     required this.muted,
     required this.blue,
@@ -1284,6 +1285,7 @@ class _FleetStrip extends StatelessWidget {
   final double hPadding;
 
   const _FleetStrip({
+    super.key,
     required this.blue,
     required this.skyLight,
     required this.navy,
@@ -1425,6 +1427,7 @@ class _RoleSection extends StatelessWidget {
   final double hPadding;
 
   const _RoleSection({
+    super.key,
     required this.tabIndex,
     required this.onTab,
     required this.onCTA,
@@ -1627,6 +1630,7 @@ class _TrustStrip extends StatelessWidget {
   final double hPadding;
 
   const _TrustStrip({
+    super.key,
     required this.blue,
     required this.skyLight,
     required this.navy,
