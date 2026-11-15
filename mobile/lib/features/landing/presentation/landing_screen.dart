@@ -252,6 +252,13 @@ class _LandingScreenState extends State<LandingScreen>
                   isDesktop: isDesktop,
                   hPadding: hPadding,
                 ),
+                _WhatWeOfferSection(
+                  navy: _navy,
+                  muted: _muted,
+                  blue: _blue,
+                  isDesktop: isDesktop,
+                  hPadding: hPadding,
+                ),
                 _FleetStrip(
                   blue: _blue,
                   skyLight: _skyLight,
@@ -1005,6 +1012,250 @@ class _DiagonalRibbonPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_DiagonalRibbonPainter old) => false;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// WHAT WE OFFER SECTION (Rapido-Inspired 3-Card Feature Showcase)
+// ════════════════════════════════════════════════════════════════════════════
+class _WhatWeOfferSection extends StatelessWidget {
+  final Color navy, muted, blue;
+  final bool isDesktop;
+  final double hPadding;
+
+  const _WhatWeOfferSection({
+    required this.navy,
+    required this.muted,
+    required this.blue,
+    required this.isDesktop,
+    required this.hPadding,
+  });
+
+  static const _offers = [
+    {
+      'title': 'Quick Pickup',
+      'desc':
+          'Pickups within minutes that help you save time on every ride. A Payano is always nearby when you need to get moving.',
+      'imageUrl':
+          'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=700&q=80',
+      'icon': Icons.flash_on_rounded,
+      'badge': 'Under 3 Mins',
+    },
+    {
+      'title': 'Best Fares',
+      'desc':
+          'Affordable prices designed for everyday student and city rides. 3 km for ₹25 flat and ₹5/km thereafter—travel more, spend less without compromising on comfort.',
+      'imageUrl':
+          'https://images.unsplash.com/photo-1526367790999-0150786686a2?auto=format&fit=crop&w=700&q=80',
+      'icon': Icons.currency_rupee_rounded,
+      'badge': '₹25 Flat Base',
+    },
+    {
+      'title': 'Never Too Far',
+      'desc':
+          'Present across Salem campuses, transit hubs, and city express routes. Wherever you go, find a Payano ride close by.',
+      'imageUrl':
+          'https://images.unsplash.com/photo-1568772585407-9361f9bf3a87?auto=format&fit=crop&w=700&q=80',
+      'icon': Icons.map_rounded,
+      'badge': 'Campus & City',
+    },
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: Colors.white,
+      padding: EdgeInsets.symmetric(horizontal: hPadding, vertical: isDesktop ? 64 : 44),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Headline: "What we offer" with gold underline
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'What we offer',
+                style: TextStyle(
+                  fontSize: isDesktop ? 38 : 28,
+                  fontWeight: FontWeight.w900,
+                  color: navy,
+                  letterSpacing: -0.8,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Container(
+                width: 54,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF59E0B), // Vibrant Gold accent bar
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 36),
+
+          // 3 Feature Cards
+          if (isDesktop)
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: _offers.map((offer) {
+                return Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    child: _OfferCard(offer: offer, navy: navy, muted: muted, blue: blue),
+                  ),
+                );
+              }).toList(),
+            )
+          else
+            Column(
+              children: _offers.map((offer) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 32),
+                  child: _OfferCard(offer: offer, navy: navy, muted: muted, blue: blue),
+                );
+              }).toList(),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _OfferCard extends StatelessWidget {
+  final Map<String, dynamic> offer;
+  final Color navy, muted, blue;
+
+  const _OfferCard({
+    required this.offer,
+    required this.navy,
+    required this.muted,
+    required this.blue,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Image Container with smooth rounded corners and badge
+        Container(
+          height: 220,
+          width: double.infinity,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(22),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.08),
+                blurRadius: 18,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Stack(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(22),
+                child: Image.network(
+                  offer['imageUrl'] as String,
+                  width: double.infinity,
+                  height: 220,
+                  fit: BoxFit.cover,
+                  loadingBuilder: (ctx, child, progress) {
+                    if (progress == null) return child;
+                    return Container(
+                      color: const Color(0xFFF1F5F9),
+                      child: Center(
+                        child: SizedBox(
+                          width: 28,
+                          height: 28,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.5,
+                            color: blue,
+                            value: progress.expectedTotalBytes != null
+                                ? progress.cumulativeBytesLoaded / progress.expectedTotalBytes!
+                                : null,
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                  errorBuilder: (ctx, err, stack) {
+                    return Container(
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [Color(0xFFEFF6FF), Color(0xFFDBEAFE)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                      ),
+                      child: Center(
+                        child: Icon(offer['icon'] as IconData, size: 54, color: blue),
+                      ),
+                    );
+                  },
+                ),
+              ),
+
+              // Floating subtle badge on image top-right
+              Positioned(
+                top: 14,
+                right: 14,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.65),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(offer['icon'] as IconData, color: const Color(0xFFF59E0B), size: 13),
+                      const SizedBox(width: 5),
+                      Text(
+                        offer['badge'] as String,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 18),
+
+        // Title
+        Text(
+          offer['title'] as String,
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.w800,
+            color: navy,
+            letterSpacing: -0.3,
+          ),
+        ),
+
+        const SizedBox(height: 8),
+
+        // Description
+        Text(
+          offer['desc'] as String,
+          style: TextStyle(
+            fontSize: 14,
+            color: muted,
+            height: 1.55,
+            fontWeight: FontWeight.w400,
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 // ════════════════════════════════════════════════════════════════════════════
