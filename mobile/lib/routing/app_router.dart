@@ -1,12 +1,15 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../features/auth/presentation/splash_screen.dart';
+import '../features/landing/presentation/landing_screen.dart';
 import '../features/onboarding/presentation/onboarding_screen.dart';
 import '../features/auth/presentation/login_screen.dart';
 import '../features/auth/presentation/signup_screen.dart';
 import '../features/auth/presentation/otp_screen.dart';
 import '../features/auth/presentation/profile_setup_screen.dart';
 import '../features/auth/presentation/student_verification_screen.dart';
+import '../core/widgets/desktop_auth_wrapper.dart';
 import '../features/home/presentation/home_screen.dart';
 import '../features/home/presentation/location_search_screen.dart';
 import '../features/ride/presentation/searching_driver_screen.dart';
@@ -37,8 +40,13 @@ import '../features/tracking/presentation/driver_tracking_screen.dart';
 
 class AppRouter {
   static final router = GoRouter(
-    initialLocation: '/splash',
+    initialLocation: kIsWeb ? '/' : '/splash',
     routes: [
+      // ── Landing page — desktop web only ──────────────────────────────────
+      GoRoute(
+        path: '/',
+        builder: (context, state) => const LandingScreen(),
+      ),
       GoRoute(
         path: '/splash',
         builder: (context, state) => const SplashScreen(),
@@ -49,22 +57,22 @@ class AppRouter {
       ),
       GoRoute(
         path: '/login',
-        builder: (context, state) => const LoginScreen(),
+        builder: (context, state) => const DesktopAuthWrapper(child: LoginScreen()),
       ),
       GoRoute(
         path: '/signup',
-        builder: (context, state) => const SignupScreen(),
+        builder: (context, state) => const DesktopAuthWrapper(child: SignupScreen()),
       ),
       GoRoute(
         path: '/otp',
         builder: (context, state) {
           final phone = state.extra as String? ?? '+91 98765 43210';
-          return OtpScreen(phone: phone);
+          return DesktopAuthWrapper(child: OtpScreen(phone: phone));
         },
       ),
       GoRoute(
         path: '/profile-setup',
-        builder: (context, state) => const ProfileSetupScreen(),
+        builder: (context, state) => const DesktopAuthWrapper(child: ProfileSetupScreen()),
       ),
       GoRoute(
         path: '/student-verification',

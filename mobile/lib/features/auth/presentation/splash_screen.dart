@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -32,6 +33,11 @@ class _SplashScreenState extends State<SplashScreen>
 
     Future.delayed(const Duration(milliseconds: 300), () async {
       if (!mounted) return;
+      // Web visitors are served the full landing page at '/'
+      if (kIsWeb) {
+        context.go('/');
+        return;
+      }
       final prefs = await SharedPreferences.getInstance();
       final onboardingDone = prefs.getBool('onboarding_completed') ?? false;
       if (!mounted) return;
