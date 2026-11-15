@@ -13,6 +13,10 @@ import '../config/app_config.dart';
 final authServiceProvider = Provider<AuthService>((ref) => AuthService());
 
 class AuthService {
+  final Dio _dio = Dio(BaseOptions(
+    connectTimeout: const Duration(seconds: 5),
+    receiveTimeout: const Duration(seconds: 5),
+  ));
   UserModel? _currentUser;
   final StreamController<UserModel?> _authStateController = StreamController<UserModel?>.broadcast();
   final FirebaseAuth _auth = FirebaseAuth.instance;
