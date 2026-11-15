@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -25,8 +26,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   int _currentNavIndex = 0;
   GoogleMapController? _mapController;
   final MapService _mapService = MapService();
+  final DraggableScrollableController _sheetController = DraggableScrollableController();
 
-  // Fare Calculation Constants (Requested: 3 km is ₹25, each additional km is ₹5, PER_CURRENCY = ₹5)
+  // Fare Calculation Constants: 3 km is ₹25, then each additional km adds ₹5 (PER_CURRENCY = ₹5)
   static const double baseKm = 3.0;
   static const double baseFare = 25.0;
   static const double perKmRate = 5.0;
@@ -39,6 +41,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   bool _isGpsLoading = false;
   List<DriverModel> _nearbyDrivers = [];
   StreamSubscription<List<DriverModel>>? _driverSub;
+
+  // Draggable sheet position extent (0.18 to 0.85)
+  double _sheetExtent = 0.40;
 
   // Selected Destination State
   String? _selectedDestTitle;
@@ -117,16 +122,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   void dispose() {
     _driverSub?.cancel();
     _mapController?.dispose();
+    _sheetController.dispose();
     super.dispose();
   }
 
   /// Calculates fare using the exact rule:
-  /// First 3 km is ₹25, then each additional km is ₹5 (PER_CURRENCY = ₹5)
+  /// First 3 km is ₹25, then each additional km adds ₹5 (PER_CURRENCY = ₹5)
   double calculatePayanoFare(double distanceKm) {
     if (distanceKm <= baseKm) {
       return baseFare;
     }
-    return baseFare + ((distanceKm - baseKm) * perKmRate);
+    final extraKm = distanceKm - baseKm;
+    return baseFare + (extraKm * perKmRate);
   }
 
   Future<void> _fetchLiveLocation() async {
@@ -165,6 +172,25 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
   }
 
+  /// Move pickup location when user taps on map or drags the pickup pin
+  void _updatePickupLocation(LatLng newLatLng) {
+    setState(() {
+      _currentLat = newLatLng.latitude;
+      _currentLng = newLatLng.longitude;
+      _currentAddress = 'Pickup (${newLatLng.latitude.toStringAsFixed(4)}, ${newLatLng.longitude.toStringAsFixed(4)})';
+    });
+
+    // Recalculate fare if destination is already selected
+    if (_destLat != null && _destLng != null && _selectedDestTitle != null) {
+      _selectDestination(
+        title: _selectedDestTitle!,
+        subtitle: _selectedDestAddress ?? '',
+        lat: _destLat!,
+        lng: _destLng!,
+      );
+    }
+  }
+
   /// Select a destination from the list or search result, calculate route & fare
   Future<void> _selectDestination({
     required String title,
@@ -175,21 +201,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final startLatLng = LatLng(_currentLat, _currentLng);
     final destLatLng = LatLng(lat, lng);
 
-    // Calculate straight line & road distance
-    final distKm = ref.read(locationServiceProvider).calculateDistanceKm(
+    // Initial distance calculation (with realistic road factor of 1.25x straight line)
+    final straightDistKm = ref.read(locationServiceProvider).calculateDistanceKm(
       _currentLat,
       _currentLng,
       lat,
       lng,
     );
-    final fare = calculatePayanoFare(distKm);
+    final estimatedRoadKm = straightDistKm * 1.25;
+    final fare = calculatePayanoFare(estimatedRoadKm);
 
     setState(() {
       _selectedDestTitle = title;
       _selectedDestAddress = subtitle;
       _destLat = lat;
       _destLng = lng;
-      _calculatedDistanceKm = double.parse(distKm.toStringAsFixed(1));
+      _calculatedDistanceKm = double.parse(estimatedRoadKm.toStringAsFixed(1));
       _calculatedFare = double.parse(fare.toStringAsFixed(0));
     });
 
@@ -248,7 +275,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           southwest: LatLng(minLat, minLng),
           northeast: LatLng(maxLat, maxLng),
         ),
-        70,
+        80,
       ),
     );
   }
@@ -344,13 +371,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     // Build markers for GoogleMap
     final markers = <Marker>{};
 
-    // User Pickup Marker
+    // User Movable Pickup Marker (Attached to exact GPS location)
     markers.add(
       Marker(
         markerId: const MarkerId('user_pickup_marker'),
         position: LatLng(_currentLat, _currentLng),
-        infoWindow: InfoWindow(title: 'Pickup Point', snippet: _currentAddress),
+        draggable: true,
+        infoWindow: InfoWindow(
+          title: '📍 Pickup Point',
+          snippet: _currentAddress,
+        ),
         icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+        onDragEnd: (newPosition) => _updatePickupLocation(newPosition),
       ),
     );
 
@@ -387,25 +419,27 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final hasDestination = _selectedDestTitle != null && _calculatedFare != null;
 
     return Scaffold(
-      backgroundColor: isDark ? AppColors.backgroundDark : const Color(0xFFF8FAFC),
+      backgroundColor: Colors.transparent, // Ensures Google Map renders on Web without canvas masking
       bottomNavigationBar: _buildBottomNavigationBar(isDark),
       body: Stack(
         children: [
-          // ── 1. Full Screen Google Map ────────────────────────────────────
+          // ── 1. Full Screen Interactive Google Map ────────────────────────
           Positioned.fill(
             child: GoogleMap(
+              key: const ValueKey('payano_google_map_view'),
               initialCameraPosition: CameraPosition(
                 target: LatLng(_currentLat, _currentLng),
                 zoom: 14.8,
               ),
               markers: markers,
               polylines: _polylines,
-              myLocationEnabled: false,
+              myLocationEnabled: true,
               myLocationButtonEnabled: false,
               zoomControlsEnabled: false,
-              compassEnabled: false,
+              compassEnabled: true,
               mapToolbarEnabled: false,
               onMapCreated: (controller) => _mapController = controller,
+              onTap: (latLng) => _updatePickupLocation(latLng),
             ),
           ),
 
@@ -484,67 +518,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
           ),
 
-          // ── 3. Visual Center Pickup Point Pin with Label (Exact Match) ───
-          if (!hasDestination)
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.only(bottom: 150),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF108A4E), // Green
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.2),
-                            blurRadius: 8,
-                            offset: const Offset(0, 3),
-                          ),
-                        ],
-                      ),
-                      child: const Text(
-                        'Pickup Point',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ),
-                    Container(
-                      width: 2,
-                      height: 12,
-                      color: const Color(0xFF108A4E),
-                    ),
-                    Container(
-                      width: 14,
-                      height: 14,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF108A4E),
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 3),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.25),
-                            blurRadius: 4,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-          // ── 4. Floating GPS Target Button & Pickup Address Pill ──────────
+          // ── 3. Floating GPS Target Button & Pickup Address Pill ──────────
+          // Smoothly floats right above the Draggable Bottom Sheet as it moves
           Positioned(
             left: 16,
             right: 16,
-            bottom: hasDestination ? 335 : 305,
+            bottom: (MediaQuery.of(context).size.height * _sheetExtent).clamp(150.0, MediaQuery.of(context).size.height * 0.85) + 10,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
@@ -559,7 +538,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.15),
+                          color: Colors.black.withOpacity(0.18),
                           blurRadius: 8,
                           offset: const Offset(0, 3),
                         ),
@@ -576,7 +555,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 8),
 
                 // Floating Current Pickup Address Card
                 Container(
@@ -586,7 +565,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     borderRadius: BorderRadius.circular(24),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.12),
+                        color: Colors.black.withOpacity(0.14),
                         blurRadius: 10,
                         offset: const Offset(0, 4),
                       ),
@@ -615,6 +594,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           ),
                         ),
                       ),
+                      const SizedBox(width: 4),
+                      const Text(
+                        '(Tap map to move)',
+                        style: TextStyle(fontSize: 10, color: Color(0xFF94A3B8)),
+                      ),
                     ],
                   ),
                 ),
@@ -622,241 +606,273 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
           ),
 
-          // ── 5. Bottom Sheet (Where do you want to go? & Recents) ──────────
-          Align(
-            alignment: Alignment.bottomCenter,
-            child: Container(
-              height: hasDestination ? 325 : 295,
-              decoration: BoxDecoration(
-                color: isDark ? AppColors.surfaceDark : Colors.white,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(isDark ? 0.4 : 0.08),
-                    blurRadius: 16,
-                    offset: const Offset(0, -4),
+          // ── 4. Draggable Scrollable Bottom Sheet (Move up or down smoothly) ──
+          NotificationListener<DraggableScrollableNotification>(
+            onNotification: (notification) {
+              setState(() {
+                _sheetExtent = notification.extent;
+              });
+              return true;
+            },
+            child: DraggableScrollableSheet(
+              controller: _sheetController,
+              initialChildSize: hasDestination ? 0.48 : 0.40,
+              minChildSize: 0.18, // Drag down to collapse and see full map!
+              maxChildSize: 0.85, // Drag up to see full list and fare!
+              snap: true,
+              snapSizes: const [0.18, 0.40, 0.48, 0.85],
+              builder: (context, scrollController) {
+                return Container(
+                  decoration: BoxDecoration(
+                    color: isDark ? AppColors.surfaceDark : Colors.white,
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(isDark ? 0.4 : 0.12),
+                        blurRadius: 16,
+                        offset: const Offset(0, -4),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-              child: Column(
-                children: [
-                  // Drag Handle Bar
-                  Container(
-                    width: 44,
-                    height: 4,
-                    margin: const EdgeInsets.only(top: 10, bottom: 12),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade300,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-
-                  // Search Box: "Where do you want to go?"
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: GestureDetector(
-                      onTap: () async {
-                        final result = await context.push('/location-search');
-                        // Refresh state if destination set in ride notifier
-                        final rideDest = ref.read(rideNotifierProvider).destination;
-                        if (rideDest != null) {
-                          _selectDestination(
-                            title: rideDest.landmark ?? rideDest.address.split(',').first,
-                            subtitle: rideDest.address,
-                            lat: rideDest.latitude,
-                            lng: rideDest.longitude,
-                          );
-                        }
-                      },
-                      child: Container(
-                        height: 50,
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        decoration: BoxDecoration(
-                          color: isDark ? const Color(0xFF1E293B) : Colors.white,
-                          borderRadius: BorderRadius.circular(25),
-                          border: Border.all(
-                            color: const Color(0xFFE2E8F0),
-                            width: 1.5,
+                  child: ListView(
+                    controller: scrollController,
+                    padding: EdgeInsets.zero,
+                    children: [
+                      // Drag Handle Bar (Indicates sheet moves up or down)
+                      Center(
+                        child: Container(
+                          width: 44,
+                          height: 5,
+                          margin: const EdgeInsets.only(top: 10, bottom: 12),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade300,
+                            borderRadius: BorderRadius.circular(3),
                           ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFFFBBF24).withOpacity(0.25),
-                              blurRadius: 10,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
                         ),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.search_rounded, color: Color(0xFF0F172A), size: 22),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Text(
-                                _selectedDestTitle ?? 'Where do you want to go?',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF0F172A),
-                                ),
+                      ),
+
+                      // Search Box: "Where do you want to go?"
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: GestureDetector(
+                          onTap: () async {
+                            await context.push('/location-search');
+                            // Refresh state if destination was set in ride notifier
+                            final rideDest = ref.read(rideNotifierProvider).destination;
+                            if (rideDest != null) {
+                              _selectDestination(
+                                title: rideDest.landmark ?? rideDest.address.split(',').first,
+                                subtitle: rideDest.address,
+                                lat: rideDest.latitude,
+                                lng: rideDest.longitude,
+                              );
+                            }
+                          },
+                          child: Container(
+                            height: 50,
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            decoration: BoxDecoration(
+                              color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                              borderRadius: BorderRadius.circular(25),
+                              border: Border.all(
+                                color: const Color(0xFFE2E8F0),
+                                width: 1.5,
                               ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 8),
-
-                  // Fare Estimation Card (Shown when a destination is chosen)
-                  if (hasDestination)
-                    Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFECFDF5),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: const Color(0xFFA7F3D0)),
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Text(
-                                      '₹${_calculatedFare!.toInt()}',
-                                      style: const TextStyle(
-                                        fontSize: 20,
-                                        fontWeight: FontWeight.bold,
-                                        color: Color(0xFF065F46),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFD1FAE5),
-                                        borderRadius: BorderRadius.circular(6),
-                                      ),
-                                      child: Text(
-                                        '${_calculatedDistanceKm} km',
-                                        style: const TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w600,
-                                          color: Color(0xFF047857),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(0xFFFBBF24).withOpacity(0.28),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 4),
                                 ),
-                                const SizedBox(height: 2),
-                                const Text(
-                                  'First 3 km: ₹25 • Addl: PER_CURRENCY = ₹5/km',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w500,
-                                    color: Color(0xFF047857),
+                              ],
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.search_rounded, color: Color(0xFF0F172A), size: 22),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    _selectedDestTitle ?? 'Where do you want to go?',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF0F172A),
+                                    ),
                                   ),
                                 ),
                               ],
                             ),
                           ),
-                          ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF108A4E),
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                            ),
-                            onPressed: () {
-                              final user = ref.read(authServiceProvider).currentUser;
-                              ref.read(rideNotifierProvider.notifier).requestRide(
-                                passengerName: user?.name ?? 'Student Passenger',
-                                passengerPhone: user?.phone ?? '+919876543210',
-                              );
-                              context.push('/searching-driver');
-                            },
-                            child: const Text('Book Ride', style: TextStyle(fontWeight: FontWeight.bold)),
-                          ),
-                        ],
+                        ),
                       ),
-                    ),
 
-                  // Destination Suggestions List (Tiruchengode, Erode Railway Station, SSM College)
-                  Expanded(
-                    child: ListView.separated(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      itemCount: _recentDestinations.length,
-                      separatorBuilder: (context, index) => const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 16),
-                        child: Divider(height: 1, thickness: 0.8, color: Color(0xFFF1F5F9)),
-                      ),
-                      itemBuilder: (context, index) {
-                        final item = _recentDestinations[index];
-                        return InkWell(
-                          onTap: () {
-                            _selectDestination(
-                              title: item['title'] as String,
-                              subtitle: item['subtitle'] as String,
-                              lat: item['lat'] as double,
-                              lng: item['lng'] as double,
-                            );
-                          },
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                            child: Row(
-                              children: [
-                                const Icon(
-                                  Icons.history_rounded,
-                                  color: Color(0xFF64748B),
-                                  size: 22,
-                                ),
-                                const SizedBox(width: 14),
-                                Expanded(
-                                  child: Column(
+                      const SizedBox(height: 10),
+
+                      // ── Real Ride Amount Calculation Card ───────────────────
+                      if (hasDestination)
+                        Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFECFDF5),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: const Color(0xFFA7F3D0), width: 1.2),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        item['title'] as String,
-                                        style: TextStyle(
-                                          fontSize: 14,
+                                        '₹${_calculatedFare!.toInt()}',
+                                        style: const TextStyle(
+                                          fontSize: 24,
                                           fontWeight: FontWeight.bold,
-                                          color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                          color: Color(0xFF065F46),
                                         ),
                                       ),
                                       const SizedBox(height: 2),
                                       Text(
-                                        item['subtitle'] as String,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
+                                        'Estimated Total Fare',
                                         style: TextStyle(
-                                          fontSize: 12,
-                                          color: isDark ? AppColors.textSecondaryDark : const Color(0xFF64748B),
+                                          fontSize: 11,
+                                          color: Colors.green.shade800,
+                                          fontWeight: FontWeight.w500,
                                         ),
                                       ),
                                     ],
                                   ),
-                                ),
-                                const SizedBox(width: 8),
-                                Icon(
-                                  item['isFavorite'] == true ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-                                  size: 20,
-                                  color: item['isFavorite'] == true ? const Color(0xFFEF4444) : const Color(0xFF94A3B8),
-                                ),
-                              ],
-                            ),
+                                  ElevatedButton(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFF108A4E),
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                      elevation: 0,
+                                    ),
+                                    onPressed: () {
+                                      final user = ref.read(authServiceProvider).currentUser;
+                                      ref.read(rideNotifierProvider.notifier).requestRide(
+                                        passengerName: user?.name ?? 'Student Passenger',
+                                        passengerPhone: user?.phone ?? '+919876543210',
+                                      );
+                                      context.push('/searching-driver');
+                                    },
+                                    child: const Text('Book Ride', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                  ),
+                                ],
+                              ),
+                              const Divider(height: 16, color: Color(0xFFA7F3D0)),
+                              // Clear Fare Formula Breakdown
+                              Row(
+                                children: [
+                                  const Icon(Icons.info_outline_rounded, size: 14, color: Color(0xFF047857)),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(
+                                      'Distance: ${_calculatedDistanceKm} km  •  Base (≤3 km): ₹25  •  Addl: PER_CURRENCY = ₹5/km',
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: Color(0xFF047857),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
                           ),
+                        ),
+
+                      // ── Salem Destination Suggestions List ──────────────────
+                      const Padding(
+                        padding: EdgeInsets.fromLTRB(18, 12, 18, 6),
+                        child: Text(
+                          'Suggested in Salem',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF94A3B8),
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ),
+
+                      ..._recentDestinations.map((item) {
+                        return Column(
+                          children: [
+                            InkWell(
+                              onTap: () {
+                                _selectDestination(
+                                  title: item['title'] as String,
+                                  subtitle: item['subtitle'] as String,
+                                  lat: item['lat'] as double,
+                                  lng: item['lng'] as double,
+                                );
+                              },
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                child: Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.history_rounded,
+                                      color: Color(0xFF64748B),
+                                      size: 22,
+                                    ),
+                                    const SizedBox(width: 14),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            item['title'] as String,
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.bold,
+                                              color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            item['subtitle'] as String,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: isDark ? AppColors.textSecondaryDark : const Color(0xFF64748B),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Icon(
+                                      item['isFavorite'] == true ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                                      size: 20,
+                                      color: item['isFavorite'] == true ? const Color(0xFFEF4444) : const Color(0xFF94A3B8),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 16),
+                              child: Divider(height: 1, thickness: 0.8, color: Color(0xFFF1F5F9)),
+                            ),
+                          ],
                         );
-                      },
-                    ),
+                      }),
+                      const SizedBox(height: 20),
+                    ],
                   ),
-                ],
-              ),
+                );
+              },
             ),
           ),
         ],

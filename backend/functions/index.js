@@ -1,4 +1,4 @@
-﻿const https = require('https');
+const https = require('https');
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 const express = require('express');
@@ -380,7 +380,7 @@ app.get('/auth/me', authenticateToken, async (req, res) => {
 
 // Root Endpoint
 app.get('/', (req, res) => {
-  res.send('Payano Backend API is running correctly! 🚀');
+  res.send('Payano Backend API is running correctly! ??');
 });
 
 // 2-Wheeler Category Rates (INR)
@@ -395,7 +395,7 @@ const TWO_WHEELER_CONFIG = {
 app.get('/pricing', (req, res) => {
   return res.json({
     status: 'success',
-    currency: '₹',
+    currency: '?',
     categories: TWO_WHEELER_CONFIG,
   });
 });
@@ -725,7 +725,7 @@ exports.api = functions.https.onRequest(app);
 if (require.main === module) {
   const PORT = process.env.PORT || 5000;
   app.listen(PORT, () => {
-    console.log(`🚀 Payano Backend API server running on http://localhost:${PORT}`);
-    console.log(`👉 Test pricing endpoint: http://localhost:${PORT}/pricing`);
+    console.log(`?? Payano Backend API server running on http://localhost:${PORT}`);
+    console.log(`?? Test pricing endpoint: http://localhost:${PORT}/pricing`);
   });
 }
