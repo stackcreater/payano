@@ -461,14 +461,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             color: const Color(0xFF108A4E),
             icon: Icons.two_wheeler_rounded,
           );
-        } else if (currentStatus == RideStatus.inTrip) {
+        } else if (currentStatus == RideStatus.tripStarted) {
           _showNotificationPopup(
             'Trip in Progress',
             'Heading to ${next.destination?.landmark ?? "destination"}.',
             color: const Color(0xFF108A4E),
             icon: Icons.navigation_rounded,
           );
-        } else if (currentStatus == RideStatus.completed) {
+        } else if (currentStatus == RideStatus.tripCompleted) {
           _showNotificationPopup(
             'Ride Completed',
             'You arrived safely at your destination!',
