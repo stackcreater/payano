@@ -615,7 +615,7 @@ class _ScooterPainter extends CustomPainter {
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 18);
 
     // Shadow
-    canvas.drawEllipse(Rect.fromCenter(center: Offset(w * 0.48, h * 0.88), width: w * 0.72, height: h * 0.08), shadowPaint);
+    canvas.drawOval(Rect.fromCenter(center: Offset(w * 0.48, h * 0.88), width: w * 0.72, height: h * 0.08), shadowPaint);
 
     // Rear wheel
     canvas.drawCircle(Offset(w * 0.22, h * 0.76), 48, darkPaint);
@@ -1227,3 +1227,4 @@ class _SectionLabel extends StatelessWidget {
     );
   }
 }
+
