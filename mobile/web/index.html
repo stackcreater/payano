@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html>
 <head>
   <base href="$FLUTTER_BASE_HREF">
@@ -113,9 +113,13 @@
       letter-spacing: 0.5px;
     }
 
-    /* MapLibre GL JS — ensure canvas fills the Flutter platform view container */
-    .maplibregl-canvas-container,
-    .maplibregl-canvas {
+    /* Google Maps JS & Platform View — ensure map canvas fills 100% of container */
+    flt-platform-view,
+    flt-platform-view > * {
+      width: 100% !important;
+      height: 100% !important;
+    }
+    .gm-style {
       width: 100% !important;
       height: 100% !important;
     }
