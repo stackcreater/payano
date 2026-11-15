@@ -49,68 +49,159 @@
       z-index: 9999;
       transition: opacity 0.5s ease;
     }
-    .payano-logo-wrap {
+
+    /* Branded Emblem from user's Payano logo */
+    .payano-brand-badge {
       display: flex;
+      flex-direction: column;
       align-items: center;
-      gap: 10px;
-      margin-bottom: 10px;
+      margin-bottom: 12px;
     }
-    .payano-icon {
-      width: 48px;
-      height: 48px;
-      background: #2563eb;
-      border-radius: 14px;
+    .splash-logo {
+      width: 135px;
+      height: 135px;
+      border-radius: 32px;
+      box-shadow: 0 16px 40px rgba(37, 99, 235, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.12);
+      object-fit: cover;
+      animation: logoPop 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    @keyframes logoPop {
+      0% { transform: scale(0.85); opacity: 0; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+
+    /* ── From Uiverse.io by vinodjangid07 — Customized for Payano Bike + Person ── */
+    .loader {
+      width: fit-content;
+      height: fit-content;
       display: flex;
       align-items: center;
       justify-content: center;
+      margin-top: 10px;
+      margin-bottom: 18px;
     }
-    .payano-icon svg {
-      width: 28px;
-      height: 28px;
-      fill: white;
-    }
-    .brand-title {
-      font-size: 30px;
-      font-weight: 800;
-      letter-spacing: 3px;
-      color: #ffffff;
-    }
-    .brand-subtitle {
-      font-size: 12px;
-      color: #64748b;
-      margin-top: 4px;
-      margin-bottom: 32px;
-      letter-spacing: 1px;
-      text-transform: uppercase;
-    }
-    /* Animated motorcycle track */
-    .track {
+
+    .truckWrapper {
+      width: 240px;
+      height: 105px;
+      display: flex;
+      flex-direction: column;
       position: relative;
-      width: 180px;
-      height: 4px;
-      background: rgba(255,255,255,0.08);
-      border-radius: 4px;
-      overflow: hidden;
-      margin-bottom: 20px;
+      align-items: center;
+      justify-content: flex-end;
+      overflow-x: hidden;
     }
-    .track-fill {
+
+    /* Bike + Rider upper body bounce */
+    .truckBody {
+      width: 125px;
+      height: fit-content;
+      margin-bottom: 2px;
+      animation: motion 0.75s ease-in-out infinite;
+    }
+
+    .bikesvg {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    /* Suspension animation */
+    @keyframes motion {
+      0% {
+        transform: translateY(0px) rotate(0deg);
+      }
+      50% {
+        transform: translateY(2.5px) rotate(-1deg);
+      }
+      100% {
+        transform: translateY(0px) rotate(0deg);
+      }
+    }
+
+    /* Bike Tires position & rotation */
+    .truckTires {
+      width: 105px;
+      height: fit-content;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0px 5px 0px 10px;
       position: absolute;
-      left: -60%;
-      top: 0;
-      width: 60%;
+      bottom: 1px;
+    }
+
+    .truckTires svg {
+      width: 26px;
+      height: 26px;
+      animation: spinTire 0.5s linear infinite;
+    }
+
+    @keyframes spinTire {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    /* Road with animated dashed lines */
+    .road {
+      width: 100%;
+      height: 2px;
+      background-color: #334155;
+      position: relative;
+      bottom: 0;
+      align-self: flex-end;
+      border-radius: 3px;
+    }
+
+    .road::before {
+      content: "";
+      position: absolute;
+      width: 24px;
       height: 100%;
-      background: linear-gradient(90deg, transparent, #2563eb, #60a5fa, transparent);
-      border-radius: 4px;
-      animation: sweep 1.4s ease-in-out infinite;
+      background-color: #3b82f6;
+      right: -50%;
+      border-radius: 3px;
+      animation: roadAnimation 1.3s linear infinite;
+      border-left: 10px solid #ffffff;
     }
-    @keyframes sweep {
-      0%   { left: -60%; }
-      100% { left: 110%; }
+
+    .road::after {
+      content: "";
+      position: absolute;
+      width: 14px;
+      height: 100%;
+      background-color: #3b82f6;
+      right: -65%;
+      border-radius: 3px;
+      animation: roadAnimation 1.3s linear infinite;
+      border-left: 5px solid #ffffff;
     }
+
+    /* Lamp post passing by */
+    .lampPost {
+      position: absolute;
+      bottom: 0;
+      right: -90%;
+      height: 85px;
+      animation: roadAnimation 1.3s linear infinite;
+      opacity: 0.85;
+      fill: #60a5fa;
+    }
+
+    @keyframes roadAnimation {
+      0% {
+        transform: translateX(0px);
+      }
+      100% {
+        transform: translateX(-380px);
+      }
+    }
+
     .loading-label {
-      font-size: 12px;
-      color: #475569;
-      letter-spacing: 0.5px;
+      font-size: 13px;
+      font-weight: 500;
+      color: #94a3b8;
+      letter-spacing: 0.8px;
     }
 
     /* Google Maps JS & Platform View — ensure map canvas fills 100% of container */
@@ -129,18 +220,108 @@
 
   <!-- ── Instant branded loading splash (shown while Flutter JS downloads) ── -->
   <div id="loading-indicator">
-    <div class="payano-logo-wrap">
-      <div class="payano-icon">
-        <!-- motorcycle silhouette -->
-        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-          <path d="M19 7l-1.5-3H14v2h2.5l1 2H14c-1.1 0-2 .9-2 2v1H6C4.3 11 3 12.3 3 14s1.3 3 3 3c1.5 0 2.7-1 3-2.4L10.6 13H12v1c0 1.1.9 2 2 2h1c.3 1.4 1.5 2.5 3 2.5 1.7 0 3-1.3 3-3s-1.3-3-3-3c-.4 0-.7.1-1 .2V9c0-.6-.4-1.1-1-1.2V7h3zm-1 7c.6 0 1 .4 1 1s-.4 1-1 1-1-.4-1-1 .4-1 1-1zM6 15c-.6 0-1-.4-1-1s.4-1 1-1 1 .4 1 1-.4 1-1 1z"/>
+    <!-- Top Branded Image (Payano Student Scooter Emblem) -->
+    <div class="payano-brand-badge">
+      <img src="payano_splash_logo.png" alt="Payano - Two-Wheeler Mobility" class="splash-logo" />
+    </div>
+
+    <!-- From Uiverse.io by vinodjangid07 — Customized Bike + 1 Person Loader -->
+    <div class="loader">
+      <div class="truckWrapper">
+        <div class="truckBody">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 130 92" class="trucksvg bikesvg">
+            <defs>
+              <linearGradient id="headlightGlow" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stop-color="#FFFCAB" stop-opacity="0.9"/>
+                <stop offset="100%" stop-color="#FFFCAB" stop-opacity="0"/>
+              </linearGradient>
+            </defs>
+
+            <!-- Headlight Beam -->
+            <polygon points="104,50 130,42 130,64 104,56" fill="url(#headlightGlow)"/>
+
+            <!-- Speed Wind Lines -->
+            <line x1="6" y1="26" x2="22" y2="26" stroke="#60A5FA" stroke-width="2" stroke-linecap="round" opacity="0.6"/>
+            <line x1="2" y1="36" x2="16" y2="36" stroke="#60A5FA" stroke-width="2" stroke-linecap="round" opacity="0.8"/>
+            <line x1="8" y1="62" x2="18" y2="62" stroke="#60A5FA" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
+
+            <!-- Student Green Backpack -->
+            <path d="M38 34 C35 34 32 38 33 46 C34 52 38 56 42 56 C45 56 46 52 46 44 Z" fill="#10B981" stroke="#059669" stroke-width="1.5"/>
+            <circle cx="39" cy="45" r="2.5" fill="#ffffff" opacity="0.9"/>
+
+            <!-- Rider Body (Navy / Royal Blue hoodie) -->
+            <path d="M44 48 L48 34 C50 28 58 28 62 33 L67 40 L60 56 Z" fill="#1D4ED8"/>
+            
+            <!-- Rider Leg & Shoe -->
+            <path d="M54 52 L66 62 L78 63" fill="none" stroke="#0F172A" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+            <rect x="74" y="61" width="10" height="5" rx="2" fill="#ffffff"/>
+
+            <!-- Rider Arm & Hand -->
+            <path d="M58 35 L74 42 L84 45" fill="none" stroke="#2563EB" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="85" cy="45" r="2.5" fill="#f87171"/>
+
+            <!-- Rider Helmet & Visor -->
+            <circle cx="64" cy="18" r="11" fill="#2563EB" stroke="#1D4ED8" stroke-width="1.5"/>
+            <path d="M68 15 Q76 17 74 23 L67 23 Z" fill="#0F172A"/>
+            <path d="M70 17 L73 19" stroke="#38bdf8" stroke-width="1.5" stroke-linecap="round"/>
+
+            <!-- Scooter Chassis & Bodywork -->
+            <path d="M36 68 L78 68 L84 56 L68 56 Z" fill="#1E293B"/>
+            <path d="M22 64 C22 52 34 46 48 48 L44 62 L26 66 Z" fill="#2563EB"/>
+            <path d="M36 48 C40 47 52 47 58 50 L56 54 L36 52 Z" fill="#0F172A"/>
+            <path d="M74 62 L86 42 L94 44 L86 64 Z" fill="#2563EB"/>
+            <path d="M86 42 L98 48 L96 58 L84 56 Z" fill="#3B82F6"/>
+            <!-- Headlight -->
+            <polygon points="98,48 103,50 102,56 96,54" fill="#FFFCAB" stroke="#F59E0B" stroke-width="1"/>
+            <!-- Handlebar -->
+            <path d="M84 38 L88 42" stroke="#64748B" stroke-width="3" stroke-linecap="round"/>
+            <circle cx="83" cy="37" r="2" fill="#0F172A"/>
+            <!-- Fork -->
+            <line x1="88" y1="52" x2="98" y2="72" stroke="#64748B" stroke-width="3" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div class="truckTires">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 30 30" class="tiresvg">
+            <circle stroke-width="3" stroke="#2563EB" fill="#1E293B" r="13.5" cy="15" cx="15"></circle>
+            <circle fill="#E2E8F0" r="7" cy="15" cx="15"></circle>
+            <circle fill="#2563EB" r="3" cy="15" cx="15"></circle>
+            <line x1="15" y1="8" x2="15" y2="22" stroke="#94A3B8" stroke-width="1.5"/>
+            <line x1="8" y1="15" x2="22" y2="15" stroke="#94A3B8" stroke-width="1.5"/>
+          </svg>
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 30 30" class="tiresvg">
+            <circle stroke-width="3" stroke="#2563EB" fill="#1E293B" r="13.5" cy="15" cx="15"></circle>
+            <circle fill="#E2E8F0" r="7" cy="15" cx="15"></circle>
+            <circle fill="#2563EB" r="3" cy="15" cx="15"></circle>
+            <line x1="15" y1="8" x2="15" y2="22" stroke="#94A3B8" stroke-width="1.5"/>
+            <line x1="8" y1="15" x2="22" y2="15" stroke="#94A3B8" stroke-width="1.5"/>
+          </svg>
+        </div>
+        <div class="road"></div>
+
+        <svg
+          xml:space="preserve"
+          viewBox="0 0 453.459 453.459"
+          xmlns="http://www.w3.org/2000/svg"
+          id="Capa_1"
+          version="1.1"
+          class="lampPost"
+        >
+          <path
+            d="M252.882,0c-37.781,0-68.686,29.953-70.245,67.358h-6.917v8.954c-26.109,2.163-45.463,10.011-45.463,19.366h9.993
+c-1.65,5.146-2.507,10.54-2.507,16.017c0,28.956,23.558,52.514,52.514,52.514c28.956,0,52.514-23.558,52.514-52.514
+c0-5.478-0.856-10.872-2.506-16.017h9.992c0-9.354-19.352-17.204-45.463-19.366v-8.954h-6.149C200.189,38.779,223.924,16,252.882,16
+c29.952,0,54.32,24.368,54.32,54.32c0,28.774-11.078,37.009-25.105,47.437c-17.444,12.968-37.216,27.667-37.216,78.884v113.914
+h-0.797c-5.068,0-9.174,4.108-9.174,9.177c0,2.844,1.293,5.383,3.321,7.066c-3.432,27.933-26.851,95.744-8.226,115.459v11.202h45.75
+v-11.202c18.625-19.715-4.794-87.527-8.227-115.459c2.029-1.683,3.322-4.223,3.322-7.066c0-5.068-4.107-9.177-9.176-9.177h-0.795
+V196.641c0-43.174,14.942-54.283,30.762-66.043c14.793-10.997,31.559-23.461,31.559-60.277C323.202,31.545,291.656,0,252.882,0z
+M232.77,111.694c0,23.442-19.071,42.514-42.514,42.514c-23.442,0-42.514-19.072-42.514-42.514c0-5.531,1.078-10.957,3.141-16.017
+h78.747C231.693,100.736,232.77,106.162,232.77,111.694z"
+          ></path>
         </svg>
       </div>
-      <div class="brand-title">PAYANO</div>
     </div>
-    <div class="brand-subtitle">Urban Two-Wheeler Mobility</div>
-    <div class="track"><div class="track-fill"></div></div>
-    <div class="loading-label">Starting up...</div>
+
+    <div class="loading-label">Starting up Payano...</div>
   </div>
 
   <!-- reCAPTCHA container required for Firebase Phone Auth on web -->
