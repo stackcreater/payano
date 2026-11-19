@@ -157,7 +157,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
+    final rawWidth = MediaQuery.of(context).size.width;
+    final cardWidth = rawWidth > 440 ? 440.0 : rawWidth;
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -227,7 +228,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     Expanded(
                       flex: 4,
                       child: Container(
-                        height: size.width * 0.42,
+                        height: cardWidth * 0.42,
                         decoration: BoxDecoration(
                           color: const Color(0xFFE8EFF8),
                           shape: BoxShape.circle,
@@ -235,7 +236,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         child: Center(
                           child: Icon(
                             Icons.two_wheeler,
-                            size: size.width * 0.22,
+                            size: cardWidth * 0.22,
                             color: const Color(0xFF2563EB),
                           ),
                         ),

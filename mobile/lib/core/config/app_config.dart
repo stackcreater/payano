@@ -23,7 +23,15 @@ class AppConfig {
   static String get appEnv => _getEnv('APP_ENV', 'development');
 
   static String get apiBaseUrl {
-    var raw = _getEnv('API_BASE_URL', 'http://localhost:5000');
+    var raw = _getEnv('API_BASE_URL', '');
+    if (kIsWeb && raw.isEmpty) {
+      // In production web on Firebase Hosting, API requests route via /api or Cloud Functions
+      // If deployed on Firebase or any domain, use relative /api or default cloud function
+      return '/api';
+    }
+    if (raw.isEmpty) {
+      raw = 'http://localhost:5000';
+    }
     // Ensure default points to port 5000
     if (raw.contains(':8000')) {
       raw = raw.replaceAll(':8000', ':5000');

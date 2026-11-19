@@ -380,7 +380,7 @@ app.get('/auth/me', authenticateToken, async (req, res) => {
 
 // Root Endpoint
 app.get('/', (req, res) => {
-  res.send('Payano Backend API is running correctly! ??');
+  res.send('Payano Backend API running ');
 });
 
 // 2-Wheeler Category Rates (INR)
@@ -400,32 +400,113 @@ app.get('/pricing', (req, res) => {
   });
 });
 
-// POST /api/fare/calculate
-app.post('/fare/calculate', (req, res) => {
-  const { category = 'moto', distanceKm = 5.0, durationMins = 15.0, surgeMultiplier = 1.0, promoDiscount = 0.0 } = req.body;
+// Haversine distance formula (km)
+function calculateHaversineDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371.0;
+  const toRad = (x) => (x * Math.PI) / 180.0;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
 
-  const cfg = TWO_WHEELER_CONFIG[category] || TWO_WHEELER_CONFIG.moto;
-  let rawFare = cfg.baseFare + (distanceKm * cfg.perKm) + (durationMins * cfg.perMin) + cfg.platformFee;
-  rawFare = rawFare * surgeMultiplier;
-  
-  let finalFare = rawFare - promoDiscount;
-  if (finalFare < cfg.minimumFare) finalFare = cfg.minimumFare;
+// POST /api/fare/calculate - Calculates trip distance, duration, and dynamic fare using Google Maps & Haversine fallback
+app.post('/fare/calculate', async (req, res) => {
+  try {
+    let {
+      pickup_lat,
+      pickup_lng,
+      dropoff_lat,
+      dropoff_lng,
+      category = 'moto',
+      distanceKm,
+      durationMins,
+      surgeMultiplier = 1.0,
+      promoDiscount = 0.0,
+    } = req.body;
 
-  return res.json({
-    status: 'success',
-    category,
-    distanceKm,
-    durationMins,
-    estimatedFare: Math.round(finalFare),
-    breakdown: {
-      baseFare: cfg.baseFare,
-      distanceFee: Math.round(distanceKm * cfg.perKm),
-      timeFee: Math.round(durationMins * cfg.perMin),
-      platformFee: cfg.platformFee,
-      surgeMultiplier,
-      discount: promoDiscount,
-    },
-  });
+    let distance_km = distanceKm;
+    let duration_mins = durationMins;
+    let calcSource = 'provided_metrics';
+
+    // 1. Process coordinates using Google Maps Distance Matrix API if coordinates are provided
+    if (pickup_lat != null && pickup_lng != null && dropoff_lat != null && dropoff_lng != null) {
+      const apiKey = process.env.GOOGLE_MAPS_API_KEY || 'AIzaSyBFtnso4MxBy37IzebKiWq3DtAjYkXov0U';
+      try {
+        const matrixUrl = `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${pickup_lat},${pickup_lng}&destinations=${dropoff_lat},${dropoff_lng}&mode=driving&key=${apiKey}`;
+        const data = await httpsGetJson(matrixUrl);
+
+        if (
+          data.status === 'OK' &&
+          data.rows &&
+          data.rows[0] &&
+          data.rows[0].elements &&
+          data.rows[0].elements[0].status === 'OK'
+        ) {
+          const elem = data.rows[0].elements[0];
+          distance_km = Number((elem.distance.value / 1000).toFixed(2));
+          duration_mins = Number((elem.duration.value / 60).toFixed(1));
+          calcSource = 'google_maps';
+        }
+      } catch (err) {
+        console.warn('Google Maps Distance Matrix failed, falling back to Haversine:', err.message);
+      }
+
+      // Fallback: Haversine distance with road curve multiplier (1.3x)
+      if (calcSource !== 'google_maps') {
+        const hDist = calculateHaversineDistance(
+          Number(pickup_lat),
+          Number(pickup_lng),
+          Number(dropoff_lat),
+          Number(dropoff_lng)
+        );
+        distance_km = Number(Math.max(hDist * 1.3, 0.5).toFixed(2));
+        duration_mins = Number(Math.max((distance_km / 30.0) * 60.0, 2.0).toFixed(1));
+        calcSource = 'haversine_fallback';
+      }
+    }
+
+    if (distance_km == null) distance_km = 5.0;
+    if (duration_mins == null) duration_mins = 15.0;
+
+    const cfg = TWO_WHEELER_CONFIG[category] || TWO_WHEELER_CONFIG.moto;
+    let rawFare =
+      cfg.baseFare +
+      distance_km * cfg.perKm +
+      duration_mins * (cfg.perMin || 1.0) +
+      (cfg.platformFee || 5.0);
+    rawFare = rawFare * surgeMultiplier;
+
+    let finalFare = rawFare - promoDiscount;
+    if (finalFare < cfg.minimumFare) finalFare = cfg.minimumFare;
+
+    return res.json({
+      status: 'success',
+      distance_km,
+      duration_mins,
+      distanceKm: distance_km,
+      durationMins: duration_mins,
+      calculated_fare: Number(finalFare.toFixed(2)),
+      estimatedFare: Math.round(finalFare),
+      currency: 'INR',
+      category,
+      breakdown: {
+        baseFare: cfg.baseFare,
+        distanceFee: Number((distance_km * cfg.perKm).toFixed(2)),
+        timeFee: Number((duration_mins * (cfg.perMin || 1.0)).toFixed(2)),
+        platformFee: cfg.platformFee || 5.0,
+        surgeMultiplier,
+        discount: promoDiscount,
+        calculationSource: calcSource,
+      },
+    });
+  } catch (error) {
+    console.error('Fare calculation error:', error);
+    return res.status(500).json({ status: 'error', message: error.message });
+  }
 });
 
 // POST /api/rides/create
